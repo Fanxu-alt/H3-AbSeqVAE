@@ -162,5 +162,4 @@ predicted binding scores
 
 If you have any questions about this repository, please contact:
 
-**Fanxu Meng**  
-Email: [f.meng@vu.nl](mailto:f.meng@vu.nl)
+**[Fanxu Meng](mailto:f.meng@vu.nl)**
