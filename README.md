@@ -64,3 +64,10 @@ Major Python libraries used in this project:
 - matplotlib
 - seaborn
 - ANARCI (for CDRH3 extraction)
+
+## Installation
+
+To install the required packages for running the code, use the following command:
+
+```bash
+pip install -r requirements.txt
