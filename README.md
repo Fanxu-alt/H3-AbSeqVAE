@@ -129,3 +129,8 @@ CDRH3 Similarity Heatmap
 
 python code/analysis/cdrh3_similarity_heatmap.py
 
+## Contact
+
+If you have any questions about this repository, please contact:
+
+Email: f.meng@vu.nl
