@@ -36,3 +36,31 @@ The code can also run on smaller GPUs (e.g., RTX 2080) by reducing:
 - 'batch_size'
 - 'max_heavy_len'
 - 'max_antigen_len'
+
+## System Requirements
+
+### Operating System
+
+The code has been tested on:
+
+- Ubuntu 20.04
+- Linux-based HPC environments
+
+### Python
+
+Python version:
+
+- Python ≥ 3.9
+
+### Python Dependencies
+
+Major Python libraries used in this project:
+
+- PyTorch ≥ 2.0
+- Transformers ≥ 4.30
+- scikit-learn
+- pandas
+- numpy
+- matplotlib
+- seaborn
+- ANARCI (for CDRH3 extraction)
