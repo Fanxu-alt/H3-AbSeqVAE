@@ -1,3 +1,237 @@
+import csv
+import math
+import re
+from pathlib import Path
+
+import pandas as pd
+
+# Config
+
+TARGET_ANTIGEN = (
+    "RVQPTESIVRFPNITNLCPFGEVFNATRFASVYAWNRKRISNCVADYSVLYNSASFSTFKCYGVSPTKLNDLCFTNVYADSFVIRGDEVRQIAPGQTGKIADYNYKLPDDFTGCVIAWNSNNLDSKVGGNYNYLYRLFRKSNLKPFERDISTEIYQAGSTPCNGVEGFNCYFPLQSYGFQPTNGVGYQPYRVVVLSFELLHAPATVCGPKKSTNLVKNKCVNF"
+)
+
+GENERATED_FILE = "generated_cdrh3_from_antigenfinetune.txt"
+NATURAL_FILE = "CoV-AbDab.csv"
+
+ANTIGEN_COL = "antigen"
+CDR3_COL = "cdr3"
+
+OUTPUT_CSV = "srr_paper_style_results.csv"
+
+# Helpers
+
+def normalize_seq(seq: str) -> str:
+    return str(seq).strip().upper()
+
+
+def parse_generated_sequences(txt_path: str):
+    """
+   Parsing this format：
+    01    len=15    ARESGASGLDGGDGY
+    02    len=18    PRDLRGDDGVPSDPEFDI
+    ...
+    """
+    seqs = []
+    pattern = re.compile(r"^\s*\d+\s+len=\d+\s+([A-Z]+)\s*$")
+
+    with open(txt_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            m = pattern.match(line)
+            if m:
+                seq = normalize_seq(m.group(1))
+                if len(seq) > 0:
+                    seqs.append(seq)
+
+    if len(seqs) == 0:
+        raise ValueError(f"No generated sequences parsed from {txt_path}")
+
+    return seqs
+
+
+def needleman_wunsch_identity(seq1: str, seq2: str, gap_penalty: int = -1):
+    """
+Calculate the identity after global comparison
+    score:
+      match = 1
+      mismatch = 0
+      gap = -1
+
+return:
+      identity = matches / alignment_length
+    """
+    s1 = normalize_seq(seq1)
+    s2 = normalize_seq(seq2)
+
+    n = len(s1)
+    m = len(s2)
+
+    # DP matrix
+    dp = [[0] * (m + 1) for _ in range(n + 1)]
+    bt = [[None] * (m + 1) for _ in range(n + 1)]  # traceback
+
+    for i in range(1, n + 1):
+        dp[i][0] = dp[i - 1][0] + gap_penalty
+        bt[i][0] = "U"
+    for j in range(1, m + 1):
+        dp[0][j] = dp[0][j - 1] + gap_penalty
+        bt[0][j] = "L"
+
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            match_score = 1 if s1[i - 1] == s2[j - 1] else 0
+            diag = dp[i - 1][j - 1] + match_score
+            up = dp[i - 1][j] + gap_penalty
+            left = dp[i][j - 1] + gap_penalty
+
+            best = max(diag, up, left)
+            dp[i][j] = best
+
+            if best == diag:
+                bt[i][j] = "D"
+            elif best == up:
+                bt[i][j] = "U"
+            else:
+                bt[i][j] = "L"
+
+    # Traceback
+    i, j = n, m
+    aligned1 = []
+    aligned2 = []
+
+    while i > 0 or j > 0:
+        move = bt[i][j]
+        if move == "D":
+            aligned1.append(s1[i - 1])
+            aligned2.append(s2[j - 1])
+            i -= 1
+            j -= 1
+        elif move == "U":
+            aligned1.append(s1[i - 1])
+            aligned2.append("-")
+            i -= 1
+        elif move == "L":
+            aligned1.append("-")
+            aligned2.append(s2[j - 1])
+            j -= 1
+        else:
+            break
+
+    aligned1.reverse()
+    aligned2.reverse()
+
+    matches = 0
+    alignment_len = len(aligned1)
+
+    for a, b in zip(aligned1, aligned2):
+        if a == b and a != "-":
+            matches += 1
+
+    identity = matches / alignment_len if alignment_len > 0 else 0.0
+    return identity
+
+
+def mean_std(values):
+    if len(values) == 0:
+        return float("nan"), float("nan")
+    mean_val = sum(values) / len(values)
+    if len(values) == 1:
+        return mean_val, 0.0
+    var = sum((x - mean_val) ** 2 for x in values) / (len(values) - 1)
+    return mean_val, math.sqrt(var)
+
+# Main
+
+def main():
+    # 1) Read the generated sequence
+    generated = parse_generated_sequences(GENERATED_FILE)
+    print(f"Loaded {len(generated)} generated CDRH3 sequences from {GENERATED_FILE}")
+
+    # 2) Reading the natural library
+    df = pd.read_csv(NATURAL_FILE)
+    if ANTIGEN_COL not in df.columns or CDR3_COL not in df.columns:
+        raise ValueError(
+            f"Expected columns '{ANTIGEN_COL}' and '{CDR3_COL}' in {NATURAL_FILE}"
+        )
+
+    df = df[[ANTIGEN_COL, CDR3_COL]].dropna().copy()
+    df[ANTIGEN_COL] = df[ANTIGEN_COL].astype(str).str.strip().str.upper()
+    df[CDR3_COL] = df[CDR3_COL].astype(str).str.strip().str.upper()
+
+    target_antigen = normalize_seq(TARGET_ANTIGEN)
+
+    # Precise matching of target antigens
+    natural_df = df[df[ANTIGEN_COL] == target_antigen].copy()
+
+    if len(natural_df) == 0:
+        print("WARNING: No exact antigen match found in natural file.")
+        print("Falling back to all natural CDRH3 sequences in the file.")
+        natural_df = df.copy()
+
+    natural_cdr3s = sorted(set(
+        seq for seq in natural_df[CDR3_COL].tolist() if isinstance(seq, str) and len(seq) > 0
+    ))
+
+    if len(natural_cdr3s) == 0:
+        raise ValueError("No natural CDRH3 sequences found for SRR evaluation.")
+
+    print(f"Using {len(natural_cdr3s)} unique natural CDRH3 sequences as reference")
+
+    # 3) Find the best natural match for each generated sequence.
+    results = []
+    best_identities = []
+
+    for idx, gen_seq in enumerate(generated, start=1):
+        best_identity = -1.0
+        best_nat = None
+
+        for nat_seq in natural_cdr3s:
+            ident = needleman_wunsch_identity(gen_seq, nat_seq)
+            if ident > best_identity:
+                best_identity = ident
+                best_nat = nat_seq
+
+        best_identities.append(best_identity)
+        results.append({
+            "generated_index": idx,
+            "generated_cdrh3": gen_seq,
+            "generated_len": len(gen_seq),
+            "best_natural_cdrh3": best_nat,
+            "best_natural_len": len(best_nat) if best_nat is not None else None,
+            "best_identity": best_identity,
+        })
+
+    # 4) Statistics SRR
+    srr_mean, srr_std = mean_std(best_identities)
+
+    print("\n===== Paper-style SRR Results =====")
+    print(f"Generated count      : {len(generated)}")
+    print(f"Natural reference    : {len(natural_cdr3s)} unique sequences")
+    print(f"SRR_mean             : {srr_mean:.4f}")
+    print(f"SRR_std              : {srr_std:.4f}")
+    print(f"Best identity min    : {min(best_identities):.4f}")
+    print(f"Best identity max    : {max(best_identities):.4f}")
+
+    # 5) Save each result
+    out_df = pd.DataFrame(results)
+    out_df.to_csv(OUTPUT_CSV, index=False)
+
+    print(f"\nSaved detailed results to: {OUTPUT_CSV}")
+
+    print("\nTop 10 examples:")
+    for row in results[:10]:
+        print(
+            f"{row['generated_index']:04d} | "
+            f"gen={row['generated_cdrh3']} | "
+            f"best_nat={row['best_natural_cdrh3']} | "
+            f"identity={row['best_identity']:.4f}"
+        )
+
+
+if __name__ == "__main__":
+    main()
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
