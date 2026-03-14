@@ -83,7 +83,7 @@ This repository provides scripts for training models, generating antibody CDRH3 
 To pretrain the variational autoencoder on CDRH3 sequences:
 
 ```bash
-python code/train/train_cdrh3_vae.py
+python code/train/train_cdrh3_vae.py```
 
 Train Conditional CDRH3 VAE
 
