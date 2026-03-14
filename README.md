@@ -69,7 +69,6 @@ Major Python libraries used in this project:
 
 To install the required packages for running the code, use the following command:
 
-
 pip install -r requirements.txt
 
 ## How to Train and Use H3-AbSeqVAE
@@ -92,41 +91,64 @@ To train the conditional VAE for antigen-conditioned CDRH3 generation:
 
 ```bash
 python code/train/train_conditional_cvae.py
+```
+
 Train Binding Prediction Model
 
 To train the antibody–antigen binding prediction model based on ESM2 and cross-attention:
 
+```bash
 python code/train/train_esm2_cross_attention.py
+```
 
 Variant-split experiment (WT/Beta/Alpha → Delta test):
 
+```bash
 python code/train/train_esm2_cross_attention_targetsplit.py
+```
+
 2. Generate CDRH3 Sequences from Antigens
 
 After training the conditional VAE, candidate CDRH3 sequences can be generated using:
 
+```bash
 python code/train/generate_cdrh3_from_antigen.py
+```
 
 Generated sequences and predicted binding scores will be saved to:
 
+```bash
 data/processed/
+```
+
 3. Run Analysis
 
 Various analysis scripts are provided to study the learned latent space and generated sequences.
 
 Extract Latent Representations
+```bash
 python code/analysis/extract_latent_vectors.py
+```
 Latent Space Visualization
+```bash
 python code/analysis/compare_latent_pca.py
+```
 Length Prediction Analysis
+```bash
 python code/analysis/analyze_length_head.py
+```
 CDRH3 Similarity Heatmap
+```bash
 python code/analysis/cdrh3_similarity_heatmap.py
+```
+
 Output Files
 
 Generated results and intermediate outputs are stored in:
 
+```bash
 data/processed/
+```
 
 Examples include:
 
@@ -136,7 +158,7 @@ generated CDRH3 sequences
 
 predicted binding scores
 
-Contact
+### Contact
 
 If you have any questions about this repository, please contact:
 
