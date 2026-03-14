@@ -84,7 +84,7 @@ To pretrain the variational autoencoder on CDRH3 sequences:
 
 ```bash
 python code/train/train_cdrh3_vae.py
-```bash
+```
 
 Train Conditional CDRH3 VAE
 
