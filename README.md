@@ -69,14 +69,12 @@ Major Python libraries used in this project:
 
 To install the required packages for running the code, use the following command:
 
-```bash
+
 pip install -r requirements.txt
 
 ## How to Train and Use H3-AbSeqVAE
 
 This repository provides scripts for training models, generating antibody CDRH3 sequences, and performing downstream analysis.
-
----
 
 ## 1. Train the Models
 
@@ -86,10 +84,12 @@ To pretrain the variational autoencoder on CDRH3 sequences:
 
 ```bash
 python code/train/train_cdrh3_vae.py
+
 Train Conditional CDRH3 VAE
 
 To train the conditional VAE for antigen-conditioned CDRH3 generation:
 
+```bash
 python code/train/train_conditional_cvae.py
 Train Binding Prediction Model
 
