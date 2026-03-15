@@ -15,9 +15,9 @@ from transformers import AutoTokenizer, AutoModel
 @dataclass
 class Config:
     csv_path: str = "biomap.csv"
-    heavy_col: str = "antibody_seq_b"
-    antigen_col: str = "antigen_seq"
-    label_col: str = "delta_g"
+    heavy_col: str = "ab"
+    antigen_col: str = "ag"
+    label_col: str = "g"
 
     model_name: str = "facebook/esm2_t6_8M_UR50D"
 
