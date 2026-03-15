@@ -3,10 +3,8 @@ import math
 import pandas as pd
 from typing import List, Tuple, Optional
 
-
-# =========================
 # Config
-# =========================
+
 GENERATED_TXT = "generated_cdrh3_from_antigenscratch.txt"
 TRAIN_CSV = "CoV-AbDab.csv"
 TRAIN_CDR3_COL = "cdr3"
