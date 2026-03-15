@@ -71,11 +71,14 @@ To install the required packages for running the code, use the following command
 
 pip install -r requirements.txt
 
+
+
+
 ## How to Train and Use H3-AbSeqVAE
 
 This repository provides scripts for training models, generating antibody CDRH3 sequences, and performing downstream analysis.
 
-## 1. Train the Models
+##  Train the Models
 
 ### Train CDRH3 VAE
 
