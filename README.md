@@ -92,8 +92,6 @@ This repository provides scripts for training models, generating antibody CDRH3 
 
 ##  Train the Models
 
-### Train CDRH3 VAE
-
 To pretrain the variational autoencoder on CDRH3 sequences:
 
 ```bash
