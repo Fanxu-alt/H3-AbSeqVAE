@@ -79,8 +79,9 @@ was trained using the small ESM2 model for demonstration and reproducibility.
 
 Due to file size limitations, checkpoints trained with larger ESM2 models are hosted on Google Drive:
 
-Download larger pretrained models (best_esm2_cross_attention_regression_fixed_antigen.pt, best_esm2_cross_attention_regression.pt, best_esm2_cross_attention.pt):  
-https://drive.google.com/xxxxx](https://drive.google.com/file/d/165swFLvLYgTeU9GINTN0OLWnccSt_9Q0/view?usp=drive_link, https://drive.google.com/file/d/1lwPIH-kQNp8MDwlRApWw9IKRqHqQb5lE/view?usp=drive_link, https://drive.google.com/file/d/1605yZZKUXDLfmdTDAX-SFL_rEPSJCXZL/view?usp=drive_link.
+Download larger pretrained models (best_esm2_cross_attention_regression_fixed_antigen.pt, best_esm2_cross_attention_regression.pt, best_esm2_cross_attention.pt): 
+
+https://drive.google.com/file/d/165swFLvLYgTeU9GINTN0OLWnccSt_9Q0/view?usp=drive_link, https://drive.google.com/file/d/1lwPIH-kQNp8MDwlRApWw9IKRqHqQb5lE/view?usp=drive_link, https://drive.google.com/file/d/1605yZZKUXDLfmdTDAX-SFL_rEPSJCXZL/view?usp=drive_link.
 
 After downloading, place the checkpoints in the `checkpoints/` directory.
 
