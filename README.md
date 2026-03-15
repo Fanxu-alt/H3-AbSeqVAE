@@ -98,15 +98,11 @@ To pretrain the variational autoencoder on CDRH3 sequences:
 python code/train/train_cdrh3_vae.py
 ```
 
-Train Conditional CDRH3 VAE
-
 To train the conditional VAE for antigen-conditioned CDRH3 generation:
 
 ```bash
 python code/train/train_conditional_cvae.py
 ```
-
-Train Binding Prediction Model
 
 To train the antibody–antigen binding prediction model based on ESM2 and cross-attention:
 
