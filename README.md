@@ -17,7 +17,7 @@ The experiments in this repository were conducted on a Linux server with the fol
 - GPU: NVIDIA A100
 - CPU: ≥8 cores
 - RAM: ≥32 GB
-- Storage: ≥20 GB free disk space
+- Storage: ≥20 GB 
 
 The code can run on a single GPU.
 
