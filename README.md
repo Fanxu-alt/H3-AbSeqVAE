@@ -27,7 +27,7 @@ The code can run on a single GPU.
 |------|------------|
 CDRH3 VAE | ~4–6 GB |
 Conditional CDRH3 VAE | ~6–8 GB |
-ESM2 Cross-Attention Binding Model | ~10–14 GB |
+ESM-2 Cross-Attention Binding Model | ~10–14 GB |
 
 ### Minimum Requirements
 
