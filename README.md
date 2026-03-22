@@ -1,7 +1,7 @@
 # An interpretable deep learning framework for antigen-guided antibody generation and binding prediction
 
 <p align="center">
-  <img src="data/raw/fig1.png" width="700">
+  <img src="data/raw/fig.png" width="700">
 </p>
 
 The framework combines:
