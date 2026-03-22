@@ -1,4 +1,4 @@
-# An interpretable deep learning framework for antigen-guided antibody generation and binding prediction
+# Sequence Driven Closed Loop Design of Antigen-Specific Antibodies with Interpretable Binding Prediction
 
 <p align="center">
   <img src="data/raw/fig.png" width="700">
