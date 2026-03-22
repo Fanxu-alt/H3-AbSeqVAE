@@ -8,7 +8,7 @@ The framework combines:
 
 - CDRH3 VAE pretraining
 - Conditional generation from antigen sequences
-- ESM2 cross-attention binding prediction
+- ESM-2 cross-attention binding prediction
 
 ## Hardware Requirements
 
