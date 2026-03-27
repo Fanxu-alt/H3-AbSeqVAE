@@ -130,7 +130,7 @@ Generated sequences and predicted binding scores will be saved to:
 data/processed/
 ```
 
-Run Analysis
+##  Run Analysis
 
 Various analysis scripts are provided to study the learned latent space and generated sequences.
 
