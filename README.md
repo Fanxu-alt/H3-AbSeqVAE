@@ -159,14 +159,6 @@ Generated results and intermediate outputs are stored in:
 data/processed/
 ```
 
-Examples include:
-
-latent embeddings
-
-generated CDRH3 sequences
-
-predicted binding scores
-
 ### Contact
 
 If you have any questions about this repository, please contact:
