@@ -1,0 +1,68 @@
+Node: gcn56.local.snellius.surf.nl
+Name: transformers
+Version: 4.57.6
+Summary: State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow
+Home-page: https://github.com/huggingface/transformers
+Author: The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)
+Author-email: transformers@huggingface.co
+License: Apache 2.0 License
+Location: /home/fmeng/venvs/vae/lib/python3.11/site-packages
+Requires: filelock, huggingface-hub, numpy, packaging, pyyaml, regex, requests, safetensors, tokenizers, tqdm
+Required-by: ankh
+Name: torch
+Version: 2.10.0
+Summary: Tensors and Dynamic neural networks in Python with strong GPU acceleration
+Home-page: https://pytorch.org
+Author: 
+Author-email: PyTorch Team <packages@pytorch.org>
+License: BSD-3-Clause
+Location: /home/fmeng/venvs/vae/lib/python3.11/site-packages
+Requires: cuda-bindings, filelock, fsspec, jinja2, networkx, nvidia-cublas-cu12, nvidia-cuda-cupti-cu12, nvidia-cuda-nvrtc-cu12, nvidia-cuda-runtime-cu12, nvidia-cudnn-cu12, nvidia-cufft-cu12, nvidia-cufile-cu12, nvidia-curand-cu12, nvidia-cusolver-cu12, nvidia-cusparse-cu12, nvidia-cusparselt-cu12, nvidia-nccl-cu12, nvidia-nvjitlink-cu12, nvidia-nvshmem-cu12, nvidia-nvtx-cu12, sympy, triton, typing-extensions
+Required-by: 
+Loaded checkpoint: best_esm2_cross_attention.pt
+best_val_auc = 0.9290
+
+Predicted binding probability: 0.999001
+
+Top heavy residues by bidirectional attention importance
+--------------------------------------------------------
+01.   R100  score=0.082163
+02.   Y105  score=0.080990
+03.   T118  score=0.057999
+04.    Y52  score=0.056774
+05.   V110  score=0.046486
+06.    R99  score=0.039699
+07.   Y104  score=0.036036
+08.    N32  score=0.028242
+09.    T57  score=0.017576
+10.    S53  score=0.012940
+11.   F120  score=0.010584
+12.    V50  score=0.008852
+13.    L78  score=0.008439
+14.    V29  score=0.007626
+15.    M82  score=0.006568
+
+Top antigen residues by bidirectional attention importance
+----------------------------------------------------------
+01.   Q180  score=0.067105
+02.    R28  score=0.049941
+03.   Y171  score=0.041948
+04.   P145  score=0.037360
+05.   E198  score=0.014377
+06.   Y133  score=0.013099
+07.   V115  score=0.012569
+08.   L134  score=0.008407
+09.   G113  score=0.007903
+10.   F197  score=0.007885
+11.   L143  score=0.007132
+12.    C73  score=0.006830
+13.   L137  score=0.006662
+14.    F82  score=0.006573
+15.   P173  score=0.006306
+16.   Y155  score=0.006286
+17.   F138  score=0.006186
+18.    V49  score=0.006176
+19.   V193  score=0.006022
+20.    F56  score=0.005825
+
+Saved figures to: attention_outputs/
