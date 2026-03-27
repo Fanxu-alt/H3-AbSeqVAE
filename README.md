@@ -116,7 +116,7 @@ Variant-split experiment (WT/Beta/Alpha → Delta test):
 python code/train/train_esm2_cross_attention_targetsplit.py
 ```
 
-Generate CDRH3 Sequences from Antigens
+##  Generate CDRH3 Sequences from Antigens
 
 After training the conditional VAE, candidate CDRH3 sequences can be generated using:
 
