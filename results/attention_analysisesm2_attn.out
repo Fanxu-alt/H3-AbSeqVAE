@@ -8,7 +8,7 @@ Author-email: transformers@huggingface.co
 License: Apache 2.0 License
 Location: /home/fmeng/venvs/vae/lib/python3.11/site-packages
 Requires: filelock, huggingface-hub, numpy, packaging, pyyaml, regex, requests, safetensors, tokenizers, tqdm
-Required-by: ankh
+
 Name: torch
 Version: 2.10.0
 Summary: Tensors and Dynamic neural networks in Python with strong GPU acceleration
