@@ -110,12 +110,6 @@ To train the antibody–antigen binding prediction model based on ESM2 and cross
 python code/train/train_esm2_cross_attention.py
 ```
 
-Variant-split experiment (WT/Beta/Alpha → Delta test):
-
-```bash
-python code/train/train_esm2_cross_attention_targetsplit.py
-```
-
 ##  Generate CDRH3 Sequences from Antigens
 
 After training the conditional VAE, candidate CDRH3 sequences can be generated using:
