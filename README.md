@@ -128,18 +128,11 @@ data/processed/
 
 Various analysis scripts are provided to study the learned latent space and generated sequences.
 
-Extract Latent Representations
-```bash
-python code/analysis/extract_latent_vectors.py
-```
 Latent Space Visualization
 ```bash
-python code/analysis/compare_latent_pca.py
+python code/analysis/latent_traversal_analysis.py
 ```
-Length Prediction Analysis
-```bash
-python code/analysis/analyze_length_head.py
-```
+
 CDRH3 Similarity Heatmap
 ```bash
 python code/analysis/cdrh3_similarity_heatmap.py
