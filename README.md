@@ -85,6 +85,18 @@ https://drive.google.com/file/d/14ZK1tzs6QaPVj8i74B2Rzhb3JpxOE25r/view?usp=drive
 
 After downloading, place the checkpoints in the `checkpoints/` directory.
 
+## Dataset: covid_human_heavy_cdr3_aa_unique_len4_30.txt
+
+This file contains a non-redundant collection of human SARS-CoV-2-associated heavy-chain CDRH3 amino acid sequences curated from the Observed Antibody Space (OAS) database.
+
+### Description
+- **Processing steps**: 
+  1. removed empty entries
+  2. removed sequences containing non-canonical amino acid characters
+  3. removed duplicate sequences globally across all files
+  4. retained only sequences with lengths between **4 and 30 amino acids**
+     
+Download: https://drive.google.com/file/d/1n46ld31QrC9oYlZVsR7JZsoOgX_TFupc/view?usp=drive_link.
 
 ## How to Train and Use H3-AbSeqVAE
 
