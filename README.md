@@ -1,4 +1,4 @@
-# Sequence Driven Closed Loop Design of Antigen-Specific Antibodies with Interpretable Binding Prediction
+# Antigen-specific antibody design from sequence via coupled generation and interaction prediction
 
 <p align="center">
   <img src="data/raw/fig.png" width="700">
