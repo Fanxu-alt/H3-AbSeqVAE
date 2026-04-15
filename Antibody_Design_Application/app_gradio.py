@@ -9,7 +9,7 @@ from developability_api import DevelopabilityRanker
 
 GEN_MODEL_PATH = "models/conditional_cvae_finetune.pt"
 BINDER_MODEL_PATH = "models/best_esm2_cross_attention.pt"
-DEV_CSV_PATH = "filtered_Labei_1.csv"
+DEV_CSV_PATH = "filtered_Label_1.csv"
 
 OUTPUT_DIR = Path("outputs")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
