@@ -175,7 +175,7 @@ def load_developability_example():
         "",
     )
 
-with gr.Blocks(title="Antibody_Design_Application") as demo:
+with gr.Blocks(title="Antibody Design Application") as demo:
     gr.Markdown("# Antibody Design App")
     gr.Markdown(
         "Local tool for antigen-conditioned CDRH3 generation, antibody-antigen binding prediction, "
