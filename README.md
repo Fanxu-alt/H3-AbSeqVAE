@@ -9,60 +9,45 @@ The framework combines:
 - CDRH3 VAE pretraining
 - Conditional generation from antigen sequences
 - ESM-2 cross-attention binding prediction
+- Developability-aware ranking
+- Interactive Gradio Web App
+
+## Framework Architecture
+Antigen Sequence
+       ↓
+[ Conditional CVAE ]
+       ↓
+Generated CDRH3 candidates
+       ↓
+[ ESM2 Cross-Attention Model ]
+       ↓
+Binding Scores
+       ↓
+[ Developability Ranking ]
+       ↓
+Final Antibody Candidates
 
 ## Hardware Requirements
-
-The experiments in this repository were conducted on a Linux server with the following hardware:
-
+### Recommended
 - GPU: NVIDIA A100
 - CPU: ≥8 cores
 - RAM: ≥32 GB
-- Storage: ≥20 GB 
+- Storage: ≥20 GB
 
-The code can run on a single GPU.
-
-### Estimated GPU Memory Usage
-
-| Model | GPU Memory |
-|------|------------|
-CDRH3 VAE | ~4–6 GB |
-Conditional CDRH3 VAE | ~6–8 GB |
-ESM-2 Cross-Attention Binding Model | ~10–14 GB |
-
-### Minimum Requirements
-
-The code can also run on smaller GPUs (e.g., RTX 2080) by reducing:
-
-- 'batch_size'
-- 'max_heavy_len'
-- 'max_antigen_len'
-
-## System Requirements
-
-### Operating System
-
-The code has been tested on:
-
-- Ubuntu 20.04
-- Linux-based HPC environments
-
-### Python
-
-Python version:
-
+### System Requirements
+- OS: Ubuntu 20.04 / Linux / macOS
 - Python ≥ 3.9
 
-### Python Dependencies
-
-Major Python libraries used in this project:
-
-- PyTorch ≥ 2.0
+### Dependencies
+- torch
 - Transformers ≥ 4.30
 - scikit-learn
 - pandas
 - numpy
 - matplotlib
 - seaborn
+- gradio==4.44.1
+- gradio_client==1.3.0
 - ANARCI (for CDRH3 extraction)
 
 ## Installation
@@ -122,18 +107,11 @@ To train the antibody–antigen binding prediction model based on ESM2 and cross
 python code/train/train_esm2_cross_attention.py
 ```
 
-##  Generate CDRH3 Sequences from Antigens
-
-After training the conditional VAE, candidate CDRH3 sequences can be generated using:
-
-```bash
-python code/train/generate_cdrh3_from_antigen.py
-```
-
-Generated sequences and predicted binding scores will be saved to:
+##  Web Application
+Launch:
 
 ```bash
-data/processed/
+python code/train/python app_gradio.py
 ```
 
 ##  Run Analysis
