@@ -111,29 +111,13 @@ python code/train/train_esm2_cross_attention.py
 Launch:
 
 ```bash
-python code/train/python app_gradio.py
+Antibody_Design_Application/train/python app_gradio.py
 ```
 
-##  Run Analysis
-
-Various analysis scripts are provided to study the learned latent space and generated sequences.
-
-Latent Space Visualization
-```bash
-python code/analysis/latent_traversal_analysis.py
-```
-
-CDRH3 Similarity Heatmap
-```bash
-python code/analysis/cdrh3_similarity_heatmap.py
-```
-
-Output Files
-
-Generated results and intermediate outputs are stored in:
+Open:
 
 ```bash
-data/processed/
+http://127.0.0.1:7860
 ```
 
 ### Contact
