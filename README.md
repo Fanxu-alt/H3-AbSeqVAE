@@ -13,19 +13,7 @@ The framework combines:
 - Interactive Gradio Web App
 
 ## Framework Architecture
-Antigen Sequence
-       ↓
-[ Conditional CVAE ]
-       ↓
-Generated CDRH3 candidates
-       ↓
-[ ESM2 Cross-Attention Model ]
-       ↓
-Binding Scores
-       ↓
-[ Developability Ranking ]
-       ↓
-Final Antibody Candidates
+Antigen Sequence → [ Conditional CVAE ] → Generated CDRH3 candidates → [ ESM2 Cross-Attention Model ] → Binding Scores → [ Developability Ranking ] → Final Antibody Candidates
 
 ## Hardware Requirements
 ### Recommended
