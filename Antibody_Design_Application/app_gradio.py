@@ -149,7 +149,7 @@ def run_developability_ranking(
         fig = ranker.plot_risk_distribution(
             target_name=target_name,
             scored_df=scored_df,
-            out_path=str(OUTPUT_DIR / "developability_panel_B.png"),
+            out_path=str(OUTPUT_DIR / "developability.png"),
         )
 
         summary = (
@@ -330,7 +330,7 @@ with gr.Blocks(title="Antibody Design Application") as demo:
                     gr.Markdown("### Output")
                     dev_summary = gr.Textbox(label="Developability summary", lines=4)
                     dev_table = gr.Dataframe(label="Developability ranking")
-                    dev_plot = gr.Plot(label="Risk distribution (Panel B)")
+                    dev_plot = gr.Plot(label="Risk distribution")
 
             dev_btn.click(
                 fn=run_developability_ranking,
