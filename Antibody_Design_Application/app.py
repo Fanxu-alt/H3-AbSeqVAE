@@ -2,7 +2,6 @@ from pathlib import Path
 
 import gradio as gr
 import pandas as pd
-from huggingface_hub import hf_hub_download
 
 from generate_api import AntibodyGenerator
 from binder_api import AntibodyBinder
@@ -13,7 +12,6 @@ from agent_api import AntibodyDesignAgent
 GEN_MODEL_PATH = "models/conditional_cvae_finetune.pt"
 BINDER_MODEL_PATH = "models/best_esm2_cross_attention.pt"
 DEV_CSV_PATH = "filtered_Label_1.csv"
-
 
 OUTPUT_DIR = Path("outputs")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -29,6 +27,8 @@ EXAMPLE_HEAVY = (
 )
 
 EXAMPLE_CDRH3 = "ARDLEMAGAFDI"
+
+DEFAULT_AGENT_TARGET_COUNT = 10
 
 generator = AntibodyGenerator(GEN_MODEL_PATH)
 binder = AntibodyBinder(BINDER_MODEL_PATH)
@@ -49,6 +49,7 @@ DEFAULT_TARGET = EXAMPLE_TARGET if EXAMPLE_TARGET in AVAILABLE_TARGETS else (
     AVAILABLE_TARGETS[0] if AVAILABLE_TARGETS else None
 )
 
+
 def graft_cdrh3_into_heavy(template_heavy: str, template_cdrh3: str, new_cdrh3: str) -> str:
     template_heavy = str(template_heavy).strip().upper()
     template_cdrh3 = str(template_cdrh3).strip().upper()
@@ -65,6 +66,7 @@ def detect_generated_cdr3_column(df: pd.DataFrame) -> str:
         if col in df.columns:
             return col
     raise ValueError("Could not find a generated CDRH3 column in generation output.")
+
 
 def run_generation(antigen, num_samples, min_len, sample_mode, temperature, deduplicate):
     try:
@@ -98,6 +100,7 @@ def run_generation(antigen, num_samples, min_len, sample_mode, temperature, dedu
 def load_generate_example():
     return EXAMPLE_ANTIGEN, 32, 8, "sample", 1.0, True
 
+
 def run_binding_prediction(heavy, antigen):
     try:
         if not heavy or not str(heavy).strip():
@@ -120,6 +123,7 @@ def run_binding_prediction(heavy, antigen):
 
 def load_bind_example():
     return EXAMPLE_HEAVY, EXAMPLE_ANTIGEN
+
 
 def run_developability_ranking(
     target_name,
@@ -155,11 +159,7 @@ def run_developability_ranking(
             })
 
         if not candidates:
-            return (
-                "Please provide at least one Heavy/CDRH3 candidate pair.",
-                pd.DataFrame(),
-                None,
-            )
+            return "Please provide at least one Heavy/CDRH3 candidate pair.", pd.DataFrame(), None
 
         scored_df = ranker.score_candidates(target_name=target_name, candidates=candidates)
 
@@ -205,6 +205,7 @@ def load_developability_example():
         "",
         "",
     )
+
 
 def run_full_pipeline(
     antigen,
@@ -351,28 +352,40 @@ def load_full_pipeline_example():
         True,
     )
 
+
+def dataframe_to_records(df: pd.DataFrame):
+    if df is None or len(df) == 0:
+        return []
+    return df.to_dict(orient="records")
+
+
+def records_to_dataframe(records):
+    if records is None or len(records) == 0:
+        return pd.DataFrame()
+    return pd.DataFrame(records)
+
+
 def run_agent(
     user_request,
     antigen_name,
     antigen_sequence,
     heavy_template,
     cdrh3_template,
-    target_count,
     max_rounds,
 ):
     try:
         if not antigen_sequence or not str(antigen_sequence).strip():
-            return "Please provide an antigen sequence.", pd.DataFrame(), pd.DataFrame()
+            return "Please provide an antigen sequence.", pd.DataFrame(), pd.DataFrame(), "", [], []
 
         if not heavy_template or not str(heavy_template).strip():
-            return "Please provide a heavy-chain template.", pd.DataFrame(), pd.DataFrame()
+            return "Please provide a heavy-chain template.", pd.DataFrame(), pd.DataFrame(), "", [], []
 
         if not cdrh3_template or not str(cdrh3_template).strip():
-            return "Please provide a CDRH3 template.", pd.DataFrame(), pd.DataFrame()
+            return "Please provide a CDRH3 template.", pd.DataFrame(), pd.DataFrame(), "", [], []
 
         if not user_request or not str(user_request).strip():
             user_request = (
-                f"Please find {int(target_count)} antibody candidates for {antigen_name} "
+                f"Please find antibody candidates for {antigen_name} "
                 f"with high predicted binding probability and good developability."
             )
 
@@ -382,14 +395,21 @@ def run_agent(
             antigen_sequence=antigen_sequence,
             heavy_template=heavy_template,
             cdrh3_template=cdrh3_template,
-            target_count=int(target_count),
+            default_target_count=DEFAULT_AGENT_TARGET_COUNT,
             max_rounds=int(max_rounds),
         )
 
-        return summary, accepted_df, history_df
+        return (
+            summary,
+            accepted_df,
+            history_df,
+            summary,
+            dataframe_to_records(accepted_df),
+            dataframe_to_records(history_df),
+        )
 
     except Exception as e:
-        return f"Error: {str(e)}", pd.DataFrame(), pd.DataFrame()
+        return f"Error: {str(e)}", pd.DataFrame(), pd.DataFrame(), "", [], []
 
 
 def load_agent_example():
@@ -399,11 +419,27 @@ def load_agent_example():
         EXAMPLE_ANTIGEN,
         EXAMPLE_HEAVY,
         EXAMPLE_CDRH3,
-        25,
         4,
     )
 
+
+def explain_current_request(user_request, antigen_name):
+    if not user_request or not str(user_request).strip():
+        return "Please enter a design request first."
+    return agent.explain_request(user_request=user_request, antigen_name=antigen_name)
+
+
+def run_fixed_analysis(analysis_type, accepted_records, history_records):
+    accepted_df = records_to_dataframe(accepted_records)
+    history_df = records_to_dataframe(history_records)
+    return agent.run_analysis(analysis_type, accepted_df, history_df)
+
+
 with gr.Blocks(title="Antibody Design Application") as demo:
+    latest_summary_state = gr.State("")
+    accepted_records_state = gr.State([])
+    history_records_state = gr.State([])
+
     gr.Markdown("""
 # Antibody Design Application
 
@@ -411,25 +447,23 @@ A sequence-driven closed-loop framework for antigen-specific antibody design.
 
 The application supports:
 - **Run Agent**: goal-oriented antibody design using a local LLM controller
+- **Analysis panel**: summary / ranking / bottleneck / threshold / sampling strategy / acceptance diagnostics / round trend
 - **Full pipeline**: Generate → Binding → Developability
 - **Generate**: antigen-conditioned CDRH3 generation
 - **Interaction prediction**: sequence-based antibody–antigen binding prediction
 - **Developability**: sequence-based developability-aware ranking
 
-**Note:** The Agent tab uses a local Ollama model via `http://127.0.0.1:11434/v1`.
+**Agent note:** The desired candidate count is inferred from the natural-language design request.  
+If the request does not specify a number, the default target is **10**.
 """)
 
     with gr.Tabs():
-
         with gr.Tab("Run Agent"):
             gr.Markdown("""
-### Goal-oriented antibody design agent
+### Design-driven agent with fixed analysis buttons
 
-This mode uses a local LLM controller to:
-- interpret the design request,
-- decide search parameters,
-- iteratively run generation, binding evaluation, and developability filtering,
-- continue until enough candidates satisfying the requested constraints are found.
+This mode keeps only the **Design request** and an analysis panel.
+After running the agent, click any analysis button to inspect the result.
 """)
 
             with gr.Row():
@@ -437,7 +471,7 @@ This mode uses a local LLM controller to:
                     agent_request = gr.Textbox(
                         label="Design request",
                         lines=5,
-                        placeholder="Example: Find 100 antibody candidates for SARS-CoV2_Beta with high binding probability and good developability.",
+                        placeholder="Example: Please find 25 antibody candidates for SARS-CoV2_Beta with high predicted binding probability and good developability.",
                     )
 
                     agent_target = gr.Dropdown(
@@ -464,14 +498,6 @@ This mode uses a local LLM controller to:
                         value=EXAMPLE_CDRH3,
                     )
 
-                    agent_target_count = gr.Slider(
-                        minimum=1,
-                        maximum=200,
-                        value=25,
-                        step=1,
-                        label="Target candidate count",
-                    )
-
                     agent_max_rounds = gr.Slider(
                         minimum=1,
                         maximum=10,
@@ -483,11 +509,28 @@ This mode uses a local LLM controller to:
                     with gr.Row():
                         agent_run_btn = gr.Button("Run Agent")
                         agent_example_btn = gr.Button("Load example")
+                        agent_explain_btn = gr.Button("Explain request")
+
+                    agent_summary = gr.Textbox(label="Agent summary", lines=7)
 
                 with gr.Column(scale=3):
-                    agent_summary = gr.Textbox(label="Agent summary", lines=6)
                     agent_accepted = gr.Dataframe(label="Accepted candidates")
                     agent_history = gr.Dataframe(label="Full search history")
+
+            gr.Markdown("### Analysis panel")
+
+            with gr.Row():
+                summary_btn = gr.Button("Summary")
+                ranking_btn = gr.Button("Ranking")
+                bottleneck_btn = gr.Button("Bottleneck")
+                threshold_btn = gr.Button("Threshold")
+
+            with gr.Row():
+                sampling_btn = gr.Button("Sampling Strategy")
+                acceptance_btn = gr.Button("Acceptance Diagnostics")
+                round_trend_btn = gr.Button("Round Trend")
+
+            analysis_output = gr.Textbox(label="Analysis output", lines=14)
 
             agent_run_btn.click(
                 fn=run_agent,
@@ -497,10 +540,16 @@ This mode uses a local LLM controller to:
                     agent_antigen,
                     agent_heavy,
                     agent_cdrh3,
-                    agent_target_count,
                     agent_max_rounds,
                 ],
-                outputs=[agent_summary, agent_accepted, agent_history],
+                outputs=[
+                    agent_summary,
+                    agent_accepted,
+                    agent_history,
+                    latest_summary_state,
+                    accepted_records_state,
+                    history_records_state,
+                ],
             )
 
             agent_example_btn.click(
@@ -512,9 +561,56 @@ This mode uses a local LLM controller to:
                     agent_antigen,
                     agent_heavy,
                     agent_cdrh3,
-                    agent_target_count,
                     agent_max_rounds,
                 ],
+            )
+
+            agent_explain_btn.click(
+                fn=explain_current_request,
+                inputs=[agent_request, agent_target],
+                outputs=[agent_summary],
+            )
+
+            summary_btn.click(
+                fn=lambda a, h: run_fixed_analysis("summary", a, h),
+                inputs=[accepted_records_state, history_records_state],
+                outputs=[analysis_output],
+            )
+
+            ranking_btn.click(
+                fn=lambda a, h: run_fixed_analysis("ranking", a, h),
+                inputs=[accepted_records_state, history_records_state],
+                outputs=[analysis_output],
+            )
+
+            bottleneck_btn.click(
+                fn=lambda a, h: run_fixed_analysis("bottleneck", a, h),
+                inputs=[accepted_records_state, history_records_state],
+                outputs=[analysis_output],
+            )
+
+            threshold_btn.click(
+                fn=lambda a, h: run_fixed_analysis("threshold", a, h),
+                inputs=[accepted_records_state, history_records_state],
+                outputs=[analysis_output],
+            )
+
+            sampling_btn.click(
+                fn=lambda a, h: run_fixed_analysis("sampling_strategy", a, h),
+                inputs=[accepted_records_state, history_records_state],
+                outputs=[analysis_output],
+            )
+
+            acceptance_btn.click(
+                fn=lambda a, h: run_fixed_analysis("acceptance_diagnostics", a, h),
+                inputs=[accepted_records_state, history_records_state],
+                outputs=[analysis_output],
+            )
+
+            round_trend_btn.click(
+                fn=lambda a, h: run_fixed_analysis("round_trend", a, h),
+                inputs=[accepted_records_state, history_records_state],
+                outputs=[analysis_output],
             )
 
         with gr.Tab("Full pipeline"):
@@ -626,6 +722,7 @@ This mode runs the full closed-loop workflow in one click:
                     full_deduplicate,
                 ],
             )
+
         with gr.Tab("Generate"):
             gr.Markdown("""
 ### Module purpose
@@ -708,6 +805,7 @@ This module generates candidate **CDRH3 sequences** conditioned on an antigen se
                     deduplicate,
                 ],
             )
+
         with gr.Tab("Interaction prediction"):
             gr.Markdown("""
 ### Module purpose
@@ -805,6 +903,5 @@ and ranks them relative to antibodies associated with the same antigen.
                     heavy3, cdr33,
                 ],
             )
-
 
 demo.launch(server_name="127.0.0.1", server_port=7860)
