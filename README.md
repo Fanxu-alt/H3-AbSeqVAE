@@ -5,7 +5,7 @@ A sequence-driven closed-loop framework for antigen-specific antibody design tha
 - Sequence-based antibody–antigen interaction prediction
 - Developability-aware candidate prioritization
 - Interactive Gradio Web App
-- 
+  
 <p align="center">
   <img src="data/raw/fig.png" width="700">
 </p>
@@ -44,14 +44,24 @@ Antigen sequence
 ```markdown
 ## Quick Start
 
-### 1. Train models
+### Train models
 ```bash
 python code/train/train_cdrh3_vae.py
 python code/train/train_conditional_cvae.py
 python code/train/train_esm2_cross_attention.py
 
+```markdown
+## Web Application
 
+Launch:
+```bash
+python Antibody_Design_Application/app_gradio.py
 
+Open:
+
+```bash
+http://127.0.0.1:7860
+```
 
 ## Pretrained Models
 
@@ -81,25 +91,6 @@ This file contains a non-redundant collection of human SARS-CoV-2-associated hea
   4. retained only sequences with lengths between **4 and 30 amino acids**
      
 Download: https://drive.google.com/file/d/1n46ld31QrC9oYlZVsR7JZsoOgX_TFupc/view?usp=drive_link.
-
-## How to Train and Use H3-AbSeqVAE
-
-This repository provides scripts for training models, generating antibody CDRH3 sequences, and performing downstream analysis.
-
-
-
-##  Web Application
-Launch:
-
-```bash
-Antibody_Design_Application/train/python app_gradio.py
-```
-
-Open:
-
-```bash
-http://127.0.0.1:7860
-```
 
 ### Contact
 
