@@ -18,10 +18,6 @@ DEV_CSV_PATH = "filtered_Label_1.csv"
 OUTPUT_DIR = Path("outputs")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-
-# =========================
-# Examples
-# =========================
 EXAMPLE_ANTIGEN = (
     "RVQPTESIVRFPNITNLCPFGEVFNATRFASVYAWNRKRISNCVADYSVLYNSASFSTFKCYGVSPTKLNDLCFTNVYADSFVIRGDEVRQIAPGQTGNIADYNYKLPDDFTGCVIAWNSNNLDSKVGGNYNYLYRLFRKSNLKPFERDISTEIYQAGSTPCNGVKGFNCYFPLQSYGFQPTYGVGYQPYRVVVLSFELLHAPATVCGPKKSTNLVKNKCVNF"
 )
@@ -34,10 +30,6 @@ EXAMPLE_HEAVY = (
 
 EXAMPLE_CDRH3 = "ARDLEMAGAFDI"
 
-
-# =========================
-# Initialize modules
-# =========================
 generator = AntibodyGenerator(GEN_MODEL_PATH)
 binder = AntibodyBinder(BINDER_MODEL_PATH)
 ranker = DevelopabilityRanker(DEV_CSV_PATH)
@@ -57,10 +49,6 @@ DEFAULT_TARGET = EXAMPLE_TARGET if EXAMPLE_TARGET in AVAILABLE_TARGETS else (
     AVAILABLE_TARGETS[0] if AVAILABLE_TARGETS else None
 )
 
-
-# =========================
-# Helpers
-# =========================
 def graft_cdrh3_into_heavy(template_heavy: str, template_cdrh3: str, new_cdrh3: str) -> str:
     template_heavy = str(template_heavy).strip().upper()
     template_cdrh3 = str(template_cdrh3).strip().upper()
@@ -78,10 +66,6 @@ def detect_generated_cdr3_column(df: pd.DataFrame) -> str:
             return col
     raise ValueError("Could not find a generated CDRH3 column in generation output.")
 
-
-# =========================
-# Generate
-# =========================
 def run_generation(antigen, num_samples, min_len, sample_mode, temperature, deduplicate):
     try:
         if not antigen or not str(antigen).strip():
@@ -114,10 +98,6 @@ def run_generation(antigen, num_samples, min_len, sample_mode, temperature, dedu
 def load_generate_example():
     return EXAMPLE_ANTIGEN, 32, 8, "sample", 1.0, True
 
-
-# =========================
-# Binding
-# =========================
 def run_binding_prediction(heavy, antigen):
     try:
         if not heavy or not str(heavy).strip():
@@ -141,10 +121,6 @@ def run_binding_prediction(heavy, antigen):
 def load_bind_example():
     return EXAMPLE_HEAVY, EXAMPLE_ANTIGEN
 
-
-# =========================
-# Developability
-# =========================
 def run_developability_ranking(
     target_name,
     heavy1, cdr31,
@@ -230,10 +206,6 @@ def load_developability_example():
         "",
     )
 
-
-# =========================
-# Full pipeline
-# =========================
 def run_full_pipeline(
     antigen,
     target_name,
@@ -379,10 +351,6 @@ def load_full_pipeline_example():
         True,
     )
 
-
-# =========================
-# Agent
-# =========================
 def run_agent(
     user_request,
     antigen_name,
@@ -435,10 +403,6 @@ def load_agent_example():
         4,
     )
 
-
-# =========================
-# UI
-# =========================
 with gr.Blocks(title="Antibody Design Application") as demo:
     gr.Markdown("""
 # Antibody Design Application
@@ -457,9 +421,6 @@ The application supports:
 
     with gr.Tabs():
 
-        # -------------------------
-        # Run Agent
-        # -------------------------
         with gr.Tab("Run Agent"):
             gr.Markdown("""
 ### Goal-oriented antibody design agent
@@ -556,9 +517,6 @@ This mode uses a local LLM controller to:
                 ],
             )
 
-        # -------------------------
-        # Full pipeline
-        # -------------------------
         with gr.Tab("Full pipeline"):
             gr.Markdown("""
 ### Module purpose
@@ -668,10 +626,6 @@ This mode runs the full closed-loop workflow in one click:
                     full_deduplicate,
                 ],
             )
-
-        # -------------------------
-        # Generate
-        # -------------------------
         with gr.Tab("Generate"):
             gr.Markdown("""
 ### Module purpose
@@ -754,10 +708,6 @@ This module generates candidate **CDRH3 sequences** conditioned on an antigen se
                     deduplicate,
                 ],
             )
-
-        # -------------------------
-        # Binding
-        # -------------------------
         with gr.Tab("Interaction prediction"):
             gr.Markdown("""
 ### Module purpose
@@ -798,9 +748,6 @@ This module predicts the probability that an antibody heavy chain interacts with
                 outputs=[heavy_input, antigen_bind],
             )
 
-        # -------------------------
-        # Developability
-        # -------------------------
         with gr.Tab("Developability"):
             gr.Markdown("""
 ### Module purpose
