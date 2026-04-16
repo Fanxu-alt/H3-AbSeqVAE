@@ -1,19 +1,22 @@
-# Antigen-specific antibody design from sequence via coupled generation and interaction prediction
+# A sequence-based framework for antigen-specific antibody design
 
+A sequence-driven closed-loop framework for antigen-specific antibody design that integrates:
+- Antigen-conditioned CDRH3 generation
+- Sequence-based antibody–antigen interaction prediction
+- Developability-aware candidate prioritization
+- Interactive Gradio Web App
+- 
 <p align="center">
   <img src="data/raw/fig.png" width="700">
 </p>
 
-The framework combines:
-
-- CDRH3 VAE pretraining
-- Conditional generation from antigen sequences
-- ESM-2 cross-attention binding prediction
-- Developability-aware ranking
-- Interactive Gradio Web App
-
 ## Framework Architecture
-Antigen Sequence → [ Conditional CVAE ] → Generated CDRH3 candidates → [ ESM2 Cross-Attention Model ] → Binding Scores → [ Developability Ranking ] → Final Antibody Candidates
+Antigen sequence  
+→ Conditional VAE (CDRH3 generation)  
+→ Generated CDRH3 candidates  
+→ ESM-2 Cross-Attention Model (binding prediction)  
+→ Developability-aware ranking  
+→ Final antibody candidates
 
 ## Hardware Requirements
 ### Recommended
@@ -38,9 +41,17 @@ Antigen Sequence → [ Conditional CVAE ] → Generated CDRH3 candidates → [ E
 - gradio_client==1.3.0
 - ANARCI (for CDRH3 extraction)
 
-## Installation
+```markdown
+## Quick Start
 
-To install the required packages for running the code, use the following command:
+### 1. Train models
+```bash
+python code/train/train_cdrh3_vae.py
+python code/train/train_conditional_cvae.py
+python code/train/train_esm2_cross_attention.py
+
+
+
 
 ## Pretrained Models
 
@@ -75,25 +86,7 @@ Download: https://drive.google.com/file/d/1n46ld31QrC9oYlZVsR7JZsoOgX_TFupc/view
 
 This repository provides scripts for training models, generating antibody CDRH3 sequences, and performing downstream analysis.
 
-##  Train the Models
 
-To pretrain the variational autoencoder on CDRH3 sequences:
-
-```bash
-python code/train/train_cdrh3_vae.py
-```
-
-To train the conditional VAE for antigen-conditioned CDRH3 generation:
-
-```bash
-python code/train/train_conditional_cvae.py
-```
-
-To train the antibody–antigen binding prediction model based on ESM2 and cross-attention:
-
-```bash
-python code/train/train_esm2_cross_attention.py
-```
 
 ##  Web Application
 Launch:
