@@ -4,7 +4,7 @@ A sequence-driven closed-loop framework for antigen-specific antibody design tha
 - Antigen-conditioned CDRH3 generation
 - Sequence-based antibody–antigen interaction prediction
 - Developability-aware candidate prioritization
-- Interactive Gradio Web App
+- Interactive Gradio Web Application
   
 <p align="center">
   <img src="data/raw/fig.png" width="700">
