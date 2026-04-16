@@ -6,9 +6,18 @@ import pandas as pd
 from generate_api import AntibodyGenerator
 from binder_api import AntibodyBinder
 from developability_api import DevelopabilityRanker
+from huggingface_hub import hf_hub_download
 
-GEN_MODEL_PATH = "models/conditional_cvae_finetune.pt"
-BINDER_MODEL_PATH = "models/best_esm2_cross_attention.pt"
+GEN_MODEL_PATH = hf_hub_download(
+    repo_id="Fanxu-alt/antibody-models",
+    filename="conditional_cvae_finetune.pt"
+)
+
+BINDER_MODEL_PATH = hf_hub_download(
+    repo_id="Fanxu-alt/antibody-models",
+    filename="best_esm2_cross_attention.pt"
+)
+
 DEV_CSV_PATH = "filtered_Label_1.csv"
 
 OUTPUT_DIR = Path("outputs")
@@ -26,13 +35,14 @@ EXAMPLE_HEAVY = (
 
 EXAMPLE_CDRH3 = "ARDLEMAGAFDI"
 
-
 generator = AntibodyGenerator(GEN_MODEL_PATH)
 binder = AntibodyBinder(BINDER_MODEL_PATH)
 ranker = DevelopabilityRanker(DEV_CSV_PATH)
 
 AVAILABLE_TARGETS = ranker.list_targets()
-DEFAULT_TARGET = EXAMPLE_TARGET if EXAMPLE_TARGET in AVAILABLE_TARGETS else (AVAILABLE_TARGETS[0] if AVAILABLE_TARGETS else None)
+DEFAULT_TARGET = EXAMPLE_TARGET if EXAMPLE_TARGET in AVAILABLE_TARGETS else (
+    AVAILABLE_TARGETS[0] if AVAILABLE_TARGETS else None
+)
 
 
 def run_generation(antigen, num_samples, min_len, sample_mode, temperature, deduplicate):
@@ -90,6 +100,7 @@ def run_binding_prediction(heavy, antigen):
 
 def load_bind_example():
     return EXAMPLE_HEAVY, EXAMPLE_ANTIGEN
+
 
 def run_developability_ranking(
     target_name,
@@ -175,16 +186,42 @@ def load_developability_example():
         "",
     )
 
+
 with gr.Blocks(title="Antibody Design Application") as demo:
-    gr.Markdown("# Antibody Design Application")
-    gr.Markdown(
-        "Local tool for antigen-conditioned CDRH3 generation, antibody-antigen binding prediction, "
-        "and developability-aware ranking."
-    )
+    gr.Markdown("""
+# Antibody Design Application
+
+Given an antigen sequence, the system can:
+• Generate candidate CDRH3 sequences conditioned on the antigen  
+• Predict antibody–antigen binding probability directly from sequence  
+• Rank candidates based on developability-related sequence features  
+""")
 
     with gr.Tabs():
 
         with gr.Tab("Generate"):
+            gr.Markdown("""
+### Module purpose
+This module generates candidate **CDRH3 sequences** conditioned on an antigen sequence.
+
+### Model background
+It is based on an antigen-conditioned variational autoencoder.
+
+### Input parameters
+- **Number of samples**: how many candidate CDRH3 sequences to generate in one run.
+- **Minimum CDRH3 length**: lower bound on generated CDRH3 length.
+- **Sampling mode**:
+  - `sample`: more diverse sequences.
+  - `argmax`: more stable, less diverse.
+  
+- **Temperature**:
+  - lower than 1.0: more conservative
+  - around 1.0: default
+  - higher than 1.0: more diverse
+  
+- **Remove duplicates**: whether to remove repeated generated CDRH3 sequences.
+""")
+
             with gr.Row():
                 with gr.Column(scale=2):
                     gr.Markdown("### Input")
@@ -263,7 +300,16 @@ with gr.Blocks(title="Antibody Design Application") as demo:
                     deduplicate,
                 ],
             )
+
         with gr.Tab("Interaction prediction"):
+            gr.Markdown("""
+### Model background
+It uses a protein language model encoder combined with bidirectional cross-attention to model sequence-level interactions between antibody and antigen.
+
+### Input parameters
+- **Heavy-chain sequence**: full antibody heavy-chain variable-region sequence.
+""")
+
             with gr.Row():
                 with gr.Column(scale=2):
                     gr.Markdown("### Input")
@@ -301,6 +347,11 @@ with gr.Blocks(title="Antibody Design Application") as demo:
             )
 
         with gr.Tab("Developability"):
+            gr.Markdown("""
+### Module purpose
+This module evaluates antibody candidates using **sequence-based developability criteria** and ranks them relative to antibodies associated with the same antigen.
+""")
+
             with gr.Row():
                 with gr.Column(scale=2):
                     gr.Markdown("### Input")
@@ -353,6 +404,5 @@ with gr.Blocks(title="Antibody Design Application") as demo:
                     heavy3, cdr33,
                 ],
             )
-
 
 demo.launch(server_name="127.0.0.1", server_port=7860)
