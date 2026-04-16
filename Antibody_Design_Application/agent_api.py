@@ -9,9 +9,6 @@ from openai import OpenAI
 
 
 def _extract_first_json_object(text: str) -> Dict[str, Any]:
-    """
-    Extract the first valid JSON object from model output.
-    """
     text = str(text).strip()
 
     try:
@@ -54,9 +51,39 @@ def detect_generated_cdr3_column(df: pd.DataFrame) -> str:
     raise ValueError("Could not find a generated CDRH3 column in generation output.")
 
 
+def extract_target_count_from_request(user_request: str) -> Optional[int]:
+    text = str(user_request or "").strip().lower()
+    if not text:
+        return None
+
+    patterns = [
+        r"\bfind\s+(\d{1,4})\s+(?:antibody\s+)?candidates?\b",
+        r"\bfind\s+(\d{1,4})\s+(?:antibodies|antibody)\b",
+        r"\bgenerate\s+(\d{1,4})\s+(?:antibody\s+)?candidates?\b",
+        r"\bgenerate\s+(\d{1,4})\s+(?:antibodies|antibody)\b",
+        r"\bdesign\s+(\d{1,4})\s+(?:antibody\s+)?candidates?\b",
+        r"\bdesign\s+(\d{1,4})\s+(?:antibodies|antibody)\b",
+        r"\bidentify\s+(\d{1,4})\s+(?:antibody\s+)?candidates?\b",
+        r"\b(\d{1,4})\s+(?:antibody\s+)?candidates?\b",
+        r"\b(\d{1,4})\s+(?:antibodies|antibody)\b",
+    ]
+
+    for pattern in patterns:
+        m = re.search(pattern, text, flags=re.IGNORECASE)
+        if m:
+            try:
+                value = int(m.group(1))
+                if 1 <= value <= 1000:
+                    return value
+            except Exception:
+                continue
+
+    return None
+
+
 @dataclass
 class AgentPlan:
-    target_count: int = 100
+    target_count: int = 10
     min_binding_probability: float = 0.80
     require_hard_filter_pass: bool = True
     require_overall_claim: bool = False
@@ -72,21 +99,6 @@ class AgentPlan:
 
 
 class AntibodyDesignAgent:
-    """
-    Goal-oriented antibody design agent.
-
-    The LLM is only used as:
-    - request interpreter
-    - plan generator
-    - round-by-round controller
-    - final summarizer
-
-    The scientific tools remain:
-    - generator
-    - binder
-    - ranker
-    """
-
     def __init__(
         self,
         generator,
@@ -117,14 +129,14 @@ class AntibodyDesignAgent:
         text = resp.choices[0].message.content or ""
         return _extract_first_json_object(text)
 
-    def _chat_text(self, system_prompt: str, user_prompt: str) -> str:
+    def _chat_text(self, system_prompt: str, user_prompt: str, temperature: float = 0.25) -> str:
         resp = self.client.chat.completions.create(
             model=self.llm_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.3,
+            temperature=temperature,
         )
         return (resp.choices[0].message.content or "").strip()
 
@@ -135,16 +147,14 @@ class AntibodyDesignAgent:
         antigen_sequence: str,
         heavy_template: str,
         cdrh3_template: str,
-        target_count: int,
+        default_target_count: int,
         max_rounds: int,
     ) -> AgentPlan:
+        parsed_target_count = extract_target_count_from_request(user_request)
+
         system_prompt = """
 You are an antibody design agent controller.
 Output ONLY one JSON object.
-Do not use markdown, bullets, comments, or code fences.
-
-Goal:
-Convert the user's design request into practical search parameters.
 
 JSON schema:
 {
@@ -162,14 +172,6 @@ JSON schema:
   "sort_risk_weight": float,
   "sort_novelty_weight": float
 }
-
-Guidance:
-- Prefer require_hard_filter_pass = true.
-- Prefer require_overall_claim = false unless the request is very strict.
-- Prefer sample mode unless the request strongly implies conservative generation.
-- Keep temperature within 0.7 to 1.2.
-- Keep num_samples_per_round practical.
-- sort_binding_weight should dominate.
 """
         user_prompt = f"""
 User request:
@@ -180,14 +182,17 @@ Context:
 - antigen_sequence_length: {len(str(antigen_sequence).strip())}
 - heavy_template_length: {len(str(heavy_template).strip())}
 - cdrh3_template_length: {len(str(cdrh3_template).strip())}
-- fallback_target_count: {target_count}
+- parsed_target_count_from_request: {parsed_target_count}
+- fallback_target_count: {default_target_count}
 - fallback_max_rounds: {max_rounds}
 """
+
+        fallback_target = parsed_target_count if parsed_target_count is not None else default_target_count
 
         try:
             raw = self._chat_json(system_prompt, user_prompt)
             plan = AgentPlan(
-                target_count=int(raw.get("target_count", target_count)),
+                target_count=int(raw.get("target_count", fallback_target)),
                 min_binding_probability=float(raw.get("min_binding_probability", 0.80)),
                 require_hard_filter_pass=bool(raw.get("require_hard_filter_pass", True)),
                 require_overall_claim=bool(raw.get("require_overall_claim", False)),
@@ -201,10 +206,12 @@ Context:
                 sort_risk_weight=float(raw.get("sort_risk_weight", 0.15)),
                 sort_novelty_weight=float(raw.get("sort_novelty_weight", 0.05)),
             )
-            return self._sanitize_plan(plan, fallback_target_count=target_count, fallback_max_rounds=max_rounds)
+            if parsed_target_count is not None:
+                plan.target_count = parsed_target_count
+            return self._sanitize_plan(plan, fallback_target, max_rounds)
         except Exception:
             return AgentPlan(
-                target_count=target_count,
+                target_count=fallback_target,
                 min_binding_probability=0.80,
                 require_hard_filter_pass=True,
                 require_overall_claim=False,
@@ -246,7 +253,6 @@ Context:
         system_prompt = """
 You are controlling an iterative antibody design search.
 Output ONLY one JSON object.
-No markdown.
 
 JSON schema:
 {
@@ -257,13 +263,6 @@ JSON schema:
   "min_len": int,
   "reason": str
 }
-
-Decision policy:
-- Stop if enough candidates have been accepted.
-- If most failures are due to low binding, reduce temperature slightly and/or increase samples.
-- If most failures are due to hard-filter failures, prefer more conservative generation.
-- If duplicates dominate, slightly increase exploration.
-- Keep values practical.
 """
         user_prompt = json.dumps(stats, indent=2)
 
@@ -292,27 +291,11 @@ Decision policy:
                     "reason": "Target count reached.",
                 }
 
-            joined = " ".join(failure_counts.keys()).lower()
-            new_temp = current_plan.temperature
-            new_n = current_plan.num_samples_per_round
-
-            if "binding_too_low" in joined:
-                new_temp = max(0.7, current_plan.temperature - 0.1)
-                new_n = min(512, int(current_plan.num_samples_per_round * 1.25))
-            elif "hard_filter_failed" in joined:
-                new_temp = max(0.75, current_plan.temperature - 0.05)
-                new_n = min(512, int(current_plan.num_samples_per_round * 1.15))
-            elif "duplicate" in joined:
-                new_temp = min(1.2, current_plan.temperature + 0.1)
-                new_n = min(512, int(current_plan.num_samples_per_round * 1.10))
-            else:
-                new_n = min(512, int(current_plan.num_samples_per_round * 1.20))
-
             return {
                 "action": "continue",
                 "sampling_mode": current_plan.sampling_mode,
-                "temperature": new_temp,
-                "num_samples_per_round": new_n,
+                "temperature": current_plan.temperature,
+                "num_samples_per_round": min(512, int(current_plan.num_samples_per_round * 1.2)),
                 "min_len": current_plan.min_len,
                 "reason": "Fallback heuristic controller.",
             }
@@ -324,7 +307,7 @@ Decision policy:
         antigen_sequence: str,
         heavy_template: str,
         cdrh3_template: str,
-        target_count: int = 100,
+        default_target_count: int = 10,
         max_rounds: int = 5,
     ) -> Tuple[str, pd.DataFrame, pd.DataFrame]:
         plan = self.make_initial_plan(
@@ -333,13 +316,12 @@ Decision policy:
             antigen_sequence=antigen_sequence,
             heavy_template=heavy_template,
             cdrh3_template=cdrh3_template,
-            target_count=target_count,
+            default_target_count=default_target_count,
             max_rounds=max_rounds,
         )
 
         accepted_rows: List[Dict[str, Any]] = []
         history_rows: List[Dict[str, Any]] = []
-
         seen_heavy = set()
         seen_cdr3 = set()
 
@@ -357,7 +339,6 @@ Decision policy:
                 continue
 
             cdr3_col = detect_generated_cdr3_column(gen_df)
-
             binding_records = []
             dev_candidates = []
 
@@ -401,27 +382,20 @@ Decision policy:
                 continue
 
             bind_df = pd.DataFrame(binding_records)
-
-            dev_df = self.ranker.score_candidates(
-                target_name=antigen_name,
-                candidates=dev_candidates,
-            )
-
+            dev_df = self.ranker.score_candidates(target_name=antigen_name, candidates=dev_candidates)
             merged = bind_df.merge(dev_df, on="candidate_name", how="left")
 
             merged["binding_probability"] = pd.to_numeric(
                 merged.get("binding_probability", 0.0), errors="coerce"
             ).fillna(0.0)
-
             merged["developability_risk_score"] = pd.to_numeric(
                 merged.get("developability_risk_score", 999.0), errors="coerce"
             ).fillna(999.0)
-
             merged["cdr3_nn_edit_distance"] = pd.to_numeric(
                 merged.get("cdr3_nn_edit_distance", 0.0), errors="coerce"
             ).fillna(0.0)
-
             merged["hard_filter_pass"] = merged.get("hard_filter_pass", False).astype(bool)
+
             if "overall_claim" in merged.columns:
                 merged["overall_claim"] = merged["overall_claim"].astype(bool)
             else:
@@ -433,15 +407,8 @@ Decision policy:
                 + plan.sort_novelty_weight * merged["cdr3_nn_edit_distance"]
             )
 
-            merged["accepted"] = merged.apply(
-                lambda x: self._passes_constraints(x, plan),
-                axis=1,
-            )
-
-            merged["reject_reason"] = merged.apply(
-                lambda x: self._reject_reason(x, plan),
-                axis=1,
-            )
+            merged["accepted"] = merged.apply(lambda x: self._passes_constraints(x, plan), axis=1)
+            merged["reject_reason"] = merged.apply(lambda x: self._reject_reason(x, plan), axis=1)
 
             merged = merged.sort_values(
                 by=["accepted", "composite_score", "binding_probability"],
@@ -494,13 +461,13 @@ Decision policy:
 
         accepted_csv = self.output_dir / "agent_accepted_candidates.csv"
         history_csv = self.output_dir / "agent_full_history.csv"
-
         accepted_df.to_csv(accepted_csv, index=False)
         history_df.to_csv(history_csv, index=False)
 
         summary = self._final_summary_text(
             user_request=user_request,
             antigen_name=antigen_name,
+            plan=plan,
             accepted_df=accepted_df,
             history_df=history_df,
             accepted_csv=str(accepted_csv),
@@ -509,29 +476,221 @@ Decision policy:
 
         return summary, accepted_df, history_df
 
-    
+    def run_analysis(self, analysis_type: str, accepted_df: pd.DataFrame, history_df: pd.DataFrame) -> str:
+        accepted_df = accepted_df if accepted_df is not None else pd.DataFrame()
+        history_df = history_df if history_df is not None else pd.DataFrame()
+
+        mapping = {
+            "summary": self._analysis_summary,
+            "ranking": self._analysis_ranking,
+            "bottleneck": self._analysis_bottleneck,
+            "threshold": self._analysis_threshold,
+            "sampling_strategy": self._analysis_sampling_strategy,
+            "acceptance_diagnostics": self._analysis_acceptance_diagnostics,
+            "round_trend": self._analysis_round_trend,
+        }
+
+        fn = mapping.get(analysis_type)
+        if fn is None:
+            return f"Unknown analysis type: {analysis_type}"
+
+        return fn(accepted_df, history_df)
+
+    def _analysis_summary(self, accepted_df: pd.DataFrame, history_df: pd.DataFrame) -> str:
+        accepted_n = len(accepted_df)
+        history_n = len(history_df)
+
+        lines = [
+            "Run summary:",
+            f"- Accepted candidates: {accepted_n}",
+            f"- Total evaluated candidates: {history_n}",
+        ]
+
+        if accepted_n == 0:
+            lines.append("- No accepted candidates are available.")
+            return "\n".join(lines)
+
+        top_df = accepted_df.head(2)
+        lines.append("- Top accepted candidates:")
+        for i, (_, row) in enumerate(top_df.iterrows(), start=1):
+            lines.append(self._format_candidate_line(i, row))
+        return "\n".join(lines)
+
+    def _analysis_ranking(self, accepted_df: pd.DataFrame, history_df: pd.DataFrame) -> str:
+        if len(accepted_df) == 0:
+            return "No accepted candidates are available."
+
+        top_df = accepted_df.head(5)
+        lines = [f"Top {len(top_df)} accepted candidates:"]
+        for i, (_, row) in enumerate(top_df.iterrows(), start=1):
+            lines.append(self._format_candidate_line(i, row))
+        return "\n".join(lines)
+
+    def _analysis_bottleneck(self, accepted_df: pd.DataFrame, history_df: pd.DataFrame) -> str:
+        reject_counts = self._reject_counts(history_df)
+        if not reject_counts:
+            return "No clear bottleneck could be identified because no rejection statistics are available."
+
+        bottleneck, count = max(reject_counts.items(), key=lambda x: x[1])
+        return (
+            f"The dominant bottleneck in this run is '{bottleneck}', "
+            f"which affected {count} evaluated candidates.\n"
+            f"Reject counts: {reject_counts}"
+        )
+
+    def _analysis_threshold(self, accepted_df: pd.DataFrame, history_df: pd.DataFrame) -> str:
+        if len(history_df) == 0:
+            return "I cannot assess threshold strictness because no run history is available."
+
+        reject_counts = self._reject_counts(history_df)
+        total = len(history_df)
+        binding_low = reject_counts.get("binding_too_low", 0)
+        hard_fail = reject_counts.get("hard_filter_failed", 0)
+
+        binding_rate = binding_low / total if total > 0 else 0.0
+        hard_rate = hard_fail / total if total > 0 else 0.0
+
+        lines = [
+            f"Binding-too-low rejection rate: {binding_rate:.1%}",
+            f"Hard-filter-failed rejection rate: {hard_rate:.1%}",
+        ]
+
+        if binding_rate >= 0.5:
+            lines.append("The binding threshold appears strict for this run.")
+        elif binding_rate >= 0.25:
+            lines.append("The binding threshold appears moderately restrictive.")
+        else:
+            lines.append("The binding threshold does not appear to be the main bottleneck.")
+
+        return "\n".join(lines)
+
+    def _analysis_sampling_strategy(self, accepted_df: pd.DataFrame, history_df: pd.DataFrame) -> str:
+        if len(history_df) == 0:
+            return "I cannot assess sampling strategy because no run history is available."
+
+        acc_rate = float(history_df["accepted"].mean()) if "accepted" in history_df.columns else None
+        reject_counts = self._reject_counts(history_df)
+
+        if acc_rate is None:
+            return "I cannot assess sampling strategy because acceptance rate is unavailable."
+
+        lines = [f"Acceptance rate: {acc_rate:.1%}"]
+
+        if acc_rate < 0.15:
+            lines.append("Increasing sampling is likely reasonable because the acceptance rate is low.")
+        else:
+            lines.append("Increasing sampling is not the first change I would make.")
+
+        if reject_counts:
+            dominant_reason = max(reject_counts.items(), key=lambda x: x[1])[0]
+            lines.append(f"Dominant rejection reason: {dominant_reason}")
+            if dominant_reason == "hard_filter_failed":
+                lines.append("Improving candidate quality may help more than only increasing sample count.")
+            elif dominant_reason == "binding_too_low":
+                lines.append("More sampling may help, but the binding constraint may also be restrictive.")
+
+        return "\n".join(lines)
+
+    def _analysis_acceptance_diagnostics(self, accepted_df: pd.DataFrame, history_df: pd.DataFrame) -> str:
+        if len(history_df) == 0:
+            return "No diagnostics are available because no run history exists."
+
+        accepted_stats = self._build_table_stats(accepted_df)
+        history_stats = self._build_table_stats(history_df)
+        reject_counts = self._reject_counts(history_df)
+
+        return (
+            "Acceptance diagnostics:\n"
+            f"- Accepted stats: {json.dumps(accepted_stats, ensure_ascii=False)}\n"
+            f"- History stats: {json.dumps(history_stats, ensure_ascii=False)}\n"
+            f"- Reject counts: {json.dumps(reject_counts, ensure_ascii=False)}"
+        )
+
+    def _analysis_round_trend(self, accepted_df: pd.DataFrame, history_df: pd.DataFrame) -> str:
+        if len(history_df) == 0 or "round" not in history_df.columns:
+            return "Round trend analysis is unavailable because no per-round history was recorded."
+
+        lines = ["Round trend:"]
+        grouped = history_df.groupby("round")
+        for round_id, df_round in grouped:
+            mean_binding = self._safe_mean(df_round, "binding_probability")
+            mean_risk = self._safe_mean(df_round, "developability_risk_score")
+            accepted_rate = self._safe_bool_rate(df_round, "accepted")
+            lines.append(
+                f"- Round {int(round_id)}: "
+                f"mean_binding_probability={self._format_float(mean_binding)}, "
+                f"mean_developability_risk_score={self._format_float(mean_risk)}, "
+                f"accepted_rate={self._format_float(accepted_rate, 3)}"
+            )
+        return "\n".join(lines)
+
+    def explain_request(
+        self,
+        user_request: str,
+        antigen_name: str = "",
+    ) -> str:
+        parsed_target_count = extract_target_count_from_request(user_request)
+        if parsed_target_count is None:
+            return (
+                f"The request asks the agent to design antibody candidates for {antigen_name}. "
+                "No explicit target count was detected, so the default count is 10."
+            )
+        return (
+            f"The request asks the agent to design antibody candidates for {antigen_name}. "
+            f"An explicit target count of {parsed_target_count} was detected."
+        )
+
+    def _format_candidate_line(self, idx: int, row: pd.Series) -> str:
+        candidate_name = row.get("candidate_name", f"C{idx}")
+        cdrh3 = row.get("generated_cdrh3", row.get("cdr3", ""))
+        binding = row.get("binding_probability", None)
+        risk = row.get("developability_risk_score", None)
+        hard_filter = row.get("hard_filter_pass", None)
+        novelty = row.get("cdr3_nn_edit_distance", None)
+
+        return (
+            f"{idx}. {candidate_name}: "
+            f"CDRH3={cdrh3}; "
+            f"binding_probability={self._format_float(binding)}; "
+            f"developability_risk_score={self._format_float(risk)}; "
+            f"hard_filter_pass={hard_filter}; "
+            f"cdr3_nn_edit_distance={self._format_float(novelty)}"
+        )
+
+    def _format_float(self, value: Any, digits: int = 3) -> str:
+        try:
+            if value is None or pd.isna(value):
+                return "NA"
+            return f"{float(value):.{digits}f}"
+        except Exception:
+            return str(value)
+
+    def _reject_counts(self, history_df: pd.DataFrame) -> Dict[str, int]:
+        if history_df is None or len(history_df) == 0 or "reject_reason" not in history_df.columns:
+            return {}
+        s = history_df["reject_reason"].fillna("").astype(str)
+        s = s[s != ""]
+        if len(s) == 0:
+            return {}
+        vc = s.value_counts().head(10)
+        return {str(k): int(v) for k, v in vc.items()}
+
     def _passes_constraints(self, row: pd.Series, plan: AgentPlan) -> bool:
         if float(row.get("binding_probability", 0.0)) < float(plan.min_binding_probability):
             return False
-
         if plan.require_hard_filter_pass and not bool(row.get("hard_filter_pass", False)):
             return False
-
         if plan.require_overall_claim and not bool(row.get("overall_claim", False)):
             return False
-
         return True
 
     def _reject_reason(self, row: pd.Series, plan: AgentPlan) -> str:
         if float(row.get("binding_probability", 0.0)) < float(plan.min_binding_probability):
             return "binding_too_low"
-
         if plan.require_hard_filter_pass and not bool(row.get("hard_filter_pass", False)):
             return "hard_filter_failed"
-
         if plan.require_overall_claim and not bool(row.get("overall_claim", False)):
             return "overall_claim_failed"
-
         return ""
 
     def _sanitize_plan(self, plan: AgentPlan, fallback_target_count: int, fallback_max_rounds: int) -> AgentPlan:
@@ -542,9 +701,6 @@ Decision policy:
         plan.min_len = max(4, min(20, int(plan.min_len)))
         plan.num_samples_per_round = max(1, min(512, int(plan.num_samples_per_round)))
         plan.max_rounds = max(1, min(20, int(plan.max_rounds or fallback_max_rounds)))
-        plan.sort_binding_weight = float(plan.sort_binding_weight)
-        plan.sort_risk_weight = float(plan.sort_risk_weight)
-        plan.sort_novelty_weight = float(plan.sort_novelty_weight)
         return plan
 
     def _safe_mean(self, df: pd.DataFrame, col: str) -> Optional[float]:
@@ -571,56 +727,50 @@ Decision policy:
         vc = s.value_counts().head(5)
         return {str(k): int(v) for k, v in vc.items()}
 
+    def _build_table_stats(self, df: pd.DataFrame) -> Dict[str, Any]:
+        if df is None or len(df) == 0:
+            return {
+                "rows": 0,
+                "mean_binding_probability": None,
+                "mean_developability_risk_score": None,
+                "hard_filter_pass_rate": None,
+                "overall_claim_rate": None,
+                "accepted_rate": None,
+                "round_counts": {},
+            }
+
+        round_counts = {}
+        if "round" in df.columns:
+            vc = df["round"].value_counts().sort_index()
+            round_counts = {str(int(k)): int(v) for k, v in vc.items()}
+
+        return {
+            "rows": int(len(df)),
+            "mean_binding_probability": self._safe_mean(df, "binding_probability"),
+            "mean_developability_risk_score": self._safe_mean(df, "developability_risk_score"),
+            "hard_filter_pass_rate": self._safe_bool_rate(df, "hard_filter_pass"),
+            "overall_claim_rate": self._safe_bool_rate(df, "overall_claim"),
+            "accepted_rate": self._safe_bool_rate(df, "accepted"),
+            "round_counts": round_counts,
+        }
+
     def _final_summary_text(
         self,
         user_request: str,
         antigen_name: str,
+        plan: AgentPlan,
         accepted_df: pd.DataFrame,
         history_df: pd.DataFrame,
         accepted_csv: str,
         history_csv: str,
     ) -> str:
-        system_prompt = """
-You are writing a concise execution summary for an antibody design agent.
-Be short, factual, and practical.
-"""
-        user_prompt = f"""
-User request:
-{user_request}
-
-Antigen name:
-{antigen_name}
-
-Accepted count:
-{len(accepted_df)}
-
-Total evaluated:
-{len(history_df)}
-
-Top accepted candidates (first 5 as JSON):
-{accepted_df.head(5).to_json(orient="records") if len(accepted_df) > 0 else "[]"}
-
-Accepted CSV:
-{accepted_csv}
-
-History CSV:
-{history_csv}
-
-Write a short summary that states:
-- whether the target count was met
-- how many candidates were accepted
-- how many total were evaluated
-- where outputs were saved
-"""
-        try:
-            return self._chat_text(system_prompt, user_prompt)
-        except Exception:
-            target_met = "yes" if len(accepted_df) > 0 else "no"
-            return (
-                f"Agent completed.\n"
-                f"Target met: {target_met}\n"
-                f"Accepted candidates: {len(accepted_df)}\n"
-                f"Total evaluated: {len(history_df)}\n"
-                f"Accepted CSV: {accepted_csv}\n"
-                f"History CSV: {history_csv}"
-            )
+        target_met = "yes" if len(accepted_df) >= int(plan.target_count) else "no"
+        return (
+            f"Agent completed.\n"
+            f"Planned target count: {plan.target_count}\n"
+            f"Target met: {target_met}\n"
+            f"Accepted candidates: {len(accepted_df)}\n"
+            f"Total evaluated: {len(history_df)}\n"
+            f"Accepted CSV: {accepted_csv}\n"
+            f"History CSV: {history_csv}"
+        )
