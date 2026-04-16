@@ -63,6 +63,12 @@ Open:
 http://127.0.0.1:7860
 ```
 
+Online demo
+
+A public online demo is available at:
+
+https://huggingface.co/spaces/Fanxu-alt/Antibody-Design-App
+
 ## Pretrained Models
 
 The checkpoint provided in this repository:
