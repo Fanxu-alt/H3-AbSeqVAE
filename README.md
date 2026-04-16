@@ -41,21 +41,36 @@ Antigen sequence
 - gradio_client==1.3.0
 - ANARCI (for CDRH3 extraction)
 
-```markdown
 ## Quick Start
 
 ### Train models
+
 ```bash
 python code/train/train_cdrh3_vae.py
 python code/train/train_conditional_cvae.py
 python code/train/train_esm2_cross_attention.py
-
-```markdown
+```
 ## Web Application
+We extend the framework into a goal-oriented antibody design agent.
+
+Given:
+
+antigen sequence
+heavy-chain template
+CDRH3 template
+user-defined constraints
+
+The agent automatically:
+
+generates candidates
+predicts binding
+filters by developability
+iterates until requirements are met
 
 Launch:
 ```bash
 python Antibody_Design_Application/app_gradio.py
+```
 
 Open:
 
@@ -63,11 +78,16 @@ Open:
 http://127.0.0.1:7860
 ```
 
-Online demo
+## Online demo
 
 A public online demo is available at:
 
 https://huggingface.co/spaces/Fanxu-alt/Antibody-Design-App
+
+### Notes
+The **goal-oriented antibody design agent** is **not included** in the online demo due to computational and deployment constraints.
+
+To use the full pipeline (including the agent), please run the application locally.
 
 ## Pretrained Models
 
