@@ -105,9 +105,6 @@ class AntibodyDesignAgent:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    # =========================
-    # LLM wrappers
-    # =========================
     def _chat_json(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
         resp = self.client.chat.completions.create(
             model=self.llm_model,
@@ -131,9 +128,6 @@ class AntibodyDesignAgent:
         )
         return (resp.choices[0].message.content or "").strip()
 
-    # =========================
-    # Planning
-    # =========================
     def make_initial_plan(
         self,
         user_request: str,
@@ -323,9 +317,6 @@ Decision policy:
                 "reason": "Fallback heuristic controller.",
             }
 
-    # =========================
-    # Core execution
-    # =========================
     def run(
         self,
         user_request: str,
@@ -518,9 +509,7 @@ Decision policy:
 
         return summary, accepted_df, history_df
 
-    # =========================
-    # Rules
-    # =========================
+    
     def _passes_constraints(self, row: pd.Series, plan: AgentPlan) -> bool:
         if float(row.get("binding_probability", 0.0)) < float(plan.min_binding_probability):
             return False
@@ -545,9 +534,6 @@ Decision policy:
 
         return ""
 
-    # =========================
-    # Utils
-    # =========================
     def _sanitize_plan(self, plan: AgentPlan, fallback_target_count: int, fallback_max_rounds: int) -> AgentPlan:
         plan.target_count = max(1, min(1000, int(plan.target_count or fallback_target_count)))
         plan.min_binding_probability = max(0.0, min(1.0, float(plan.min_binding_probability)))
