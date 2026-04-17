@@ -182,7 +182,6 @@ class AntibodyDesignAgent:
         system_prompt = """
 You are an antibody design agent controller.
 Output ONLY one JSON object.
-
 JSON schema:
 {
   "target_count": int,
@@ -203,7 +202,6 @@ JSON schema:
         user_prompt = f"""
 User request:
 {user_request}
-
 Context:
 - antigen_name: {antigen_name}
 - antigen_sequence_length: {len(str(antigen_sequence).strip())}
@@ -277,7 +275,6 @@ Context:
         system_prompt = """
 You are controlling an iterative antibody design search.
 Output ONLY one JSON object.
-
 JSON schema:
 {
   "action": "continue" or "stop",
@@ -485,31 +482,22 @@ You are an antibody design analysis assistant.
         user_prompt = f"""
 User question:
 {question}
-
 Current design request:
 {user_request}
-
 Current antigen:
 {antigen_name}
-
 Latest run summary:
 {latest_summary}
-
 Accepted stats:
 {json.dumps(accepted_stats, ensure_ascii=False, indent=2)}
-
 History stats:
 {json.dumps(history_stats, ensure_ascii=False, indent=2)}
-
 Reject counts:
 {json.dumps(reject_counts, ensure_ascii=False, indent=2)}
-
 Accepted preview:
 {json.dumps(accepted_preview, ensure_ascii=False, indent=2)}
-
 History preview:
 {json.dumps(history_preview, ensure_ascii=False, indent=2)}
-
 Recent conversation:
 {history_text}
 """
@@ -518,25 +506,31 @@ Recent conversation:
             return self._chat_text(system_prompt, user_prompt, temperature=0.2)
         except Exception as e:
             return f"Error while generating answer: {str(e)}"
-
-    def _chat_history_to_text(self, chat_history: List[Dict[str, str]], max_turns: int = 6) -> str:
+    def _chat_history_to_text(self, chat_history, max_turns: int = 6) -> str:
         if not chat_history:
             return ""
+
         trimmed = chat_history[-2 * max_turns:]
         parts = []
-        for msg in trimmed:
-            if not isinstance(msg, dict):
+
+        for item in trimmed:
+            if not isinstance(item, dict):
                 continue
-            role = str(msg.get("role", "")).strip().lower()
-            content = self._normalize_chat_content(msg.get("content", ""))
+
+            role = str(item.get("role", "")).strip().lower()
+            content = self._normalize_chat_content(item.get("content", ""))
+
             if not content:
                 continue
+
             if role == "user":
                 parts.append(f"User: {content}")
             elif role == "assistant":
                 parts.append(f"Assistant: {content}")
-        return "\n".join(parts)
 
+        return "\n".join(parts)
+    
+       
     def _normalize_chat_content(self, raw: Any) -> str:
         if isinstance(raw, str):
             return raw.strip()
