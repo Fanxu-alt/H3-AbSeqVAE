@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 import gradio as gr
 import pandas as pd
@@ -7,7 +8,6 @@ from generate_api import AntibodyGenerator
 from binder_api import AntibodyBinder
 from developability_api import DevelopabilityRanker
 from agent_api import AntibodyDesignAgent
-
 
 GEN_MODEL_PATH = "models/conditional_cvae_finetune.pt"
 BINDER_MODEL_PATH = "models/best_esm2_cross_attention.pt"
@@ -27,22 +27,32 @@ EXAMPLE_HEAVY = (
 )
 
 EXAMPLE_CDRH3 = "ARDLEMAGAFDI"
-
 DEFAULT_AGENT_TARGET_COUNT = 10
 
-generator = AntibodyGenerator(GEN_MODEL_PATH)
-binder = AntibodyBinder(BINDER_MODEL_PATH)
-ranker = DevelopabilityRanker(DEV_CSV_PATH)
 
-agent = AntibodyDesignAgent(
-    generator=generator,
-    binder=binder,
-    ranker=ranker,
-    llm_model="qwen3:8b",
-    base_url="http://127.0.0.1:11434/v1",
-    api_key="ollama",
-    output_dir=str(OUTPUT_DIR),
-)
+def build_agent() -> AntibodyDesignAgent:
+    generator = AntibodyGenerator(GEN_MODEL_PATH)
+    binder = AntibodyBinder(BINDER_MODEL_PATH)
+    ranker = DevelopabilityRanker(DEV_CSV_PATH)
+
+    return AntibodyDesignAgent(
+        generator=generator,
+        binder=binder,
+        ranker=ranker,
+        llm_model=os.getenv("ANTIBODY_LLM_MODEL", "gpt-4o-mini"),
+        base_url=os.getenv("ANTIBODY_LLM_BASE_URL", "https://api.openai.com/v1"),
+        api_key=os.getenv("OPENAI_API_KEY", ""),
+        output_dir=str(OUTPUT_DIR),
+        app_name="Antibody Design Application",
+        app_url="http://127.0.0.1:7860",
+    )
+
+
+
+agent = build_agent()
+generator = agent.generator
+binder = agent.binder
+ranker = agent.ranker
 
 AVAILABLE_TARGETS = ranker.list_targets()
 DEFAULT_TARGET = EXAMPLE_TARGET if EXAMPLE_TARGET in AVAILABLE_TARGETS else (
@@ -66,6 +76,44 @@ def detect_generated_cdr3_column(df: pd.DataFrame) -> str:
         if col in df.columns:
             return col
     raise ValueError("Could not find a generated CDRH3 column in generation output.")
+
+
+def dataframe_to_records(df: pd.DataFrame):
+    if df is None or len(df) == 0:
+        return []
+    return df.to_dict(orient="records")
+
+
+def records_to_dataframe(records):
+    if records is None or len(records) == 0:
+        return pd.DataFrame()
+    return pd.DataFrame(records)
+
+
+def normalize_chat_content(raw):
+    if isinstance(raw, str):
+        return raw.strip()
+
+    if isinstance(raw, list):
+        texts = []
+        for item in raw:
+            if isinstance(item, dict):
+                if "text" in item:
+                    texts.append(str(item["text"]))
+                elif "content" in item:
+                    texts.append(str(item["content"]))
+            else:
+                texts.append(str(item))
+        return " ".join([t for t in texts if str(t).strip()]).strip()
+
+    if isinstance(raw, dict):
+        if "text" in raw:
+            return str(raw.get("text", "")).strip()
+        if "content" in raw:
+            return str(raw.get("content", "")).strip()
+        return str(raw)
+
+    return str(raw).strip()
 
 
 def run_generation(antigen, num_samples, min_len, sample_mode, temperature, deduplicate):
@@ -353,116 +401,103 @@ def load_full_pipeline_example():
     )
 
 
-def dataframe_to_records(df: pd.DataFrame):
-    if df is None or len(df) == 0:
-        return []
-    return df.to_dict(orient="records")
-
-
-def records_to_dataframe(records):
-    if records is None or len(records) == 0:
-        return pd.DataFrame()
-    return pd.DataFrame(records)
-
-
 def run_agent(
-    user_request,
     antigen_name,
     antigen_sequence,
     heavy_template,
     cdrh3_template,
+    target_count,
+    min_binding_probability,
     max_rounds,
 ):
     try:
         if not antigen_sequence or not str(antigen_sequence).strip():
-            return "Please provide an antigen sequence.", pd.DataFrame(), pd.DataFrame(), "", [], []
+            msg = "Please provide an antigen sequence."
+            return pd.DataFrame(), pd.DataFrame(), msg, [], [], [{"role": "assistant", "content": msg}]
 
         if not heavy_template or not str(heavy_template).strip():
-            return "Please provide a heavy-chain template.", pd.DataFrame(), pd.DataFrame(), "", [], []
+            msg = "Please provide a heavy-chain template."
+            return pd.DataFrame(), pd.DataFrame(), msg, [], [], [{"role": "assistant", "content": msg}]
 
         if not cdrh3_template or not str(cdrh3_template).strip():
-            return "Please provide a CDRH3 template.", pd.DataFrame(), pd.DataFrame(), "", [], []
+            msg = "Please provide a CDRH3 template."
+            return pd.DataFrame(), pd.DataFrame(), msg, [], [], [{"role": "assistant", "content": msg}]
 
-        if not user_request or not str(user_request).strip():
-            user_request = (
-                f"Please find antibody candidates for {antigen_name} "
-                f"with high predicted binding probability and good developability."
-            )
+        target_count = int(target_count)
 
-        summary, accepted_df, history_df = agent.run(
-            user_request=user_request,
+        default_request = (
+            f"Please find {target_count} antibody candidates for {antigen_name} "
+            f"with high predicted binding probability and good developability."
+        )
+        plan = agent.make_initial_plan(
+            user_request=default_request,
             antigen_name=antigen_name,
             antigen_sequence=antigen_sequence,
             heavy_template=heavy_template,
             cdrh3_template=cdrh3_template,
-            default_target_count=DEFAULT_AGENT_TARGET_COUNT,
-            max_rounds=int(max_rounds),
+            default_target_count=target_count,
+            max_rounds=max_rounds,
         )
 
+        plan.min_binding_probability = float(min_binding_probability)
+        summary, accepted_df, history_df = agent.run(
+            user_request=default_request,
+            antigen_name=antigen_name,
+            antigen_sequence=antigen_sequence,
+            heavy_template=heavy_template,
+            cdrh3_template=cdrh3_template,
+            default_target_count=int(target_count),
+            max_rounds=int(max_rounds),
+            min_binding_probability=float(min_binding_probability),  
+        )
+
+      
+
+        chat_seed = [
+            {"role": "assistant", "content": normalize_chat_content(summary)},
+            {
+                "role": "assistant",
+                "content": (
+                    "Design run completed. You can now ask questions here, for example:\n"
+                    "- Summarize this run\n"
+                    "- Rank the top candidates\n"
+                    "- Why were candidates rejected?\n"
+                    "- What is the bottleneck?\n"
+                    "- Compare the top 2 accepted candidates\n"
+                    "- What should the next round change?"
+                ),
+            },
+        ]
+
         return (
-            summary,
             accepted_df,
             history_df,
             summary,
             dataframe_to_records(accepted_df),
             dataframe_to_records(history_df),
+            chat_seed,
         )
 
     except Exception as e:
-        return f"Error: {str(e)}", pd.DataFrame(), pd.DataFrame(), "", [], []
+        msg = f"Error: {str(e)}"
+        return pd.DataFrame(), pd.DataFrame(), msg, [], [], [{"role": "assistant", "content": msg}]
 
 
 def load_agent_example():
     return (
-        "Please find 25 antibody candidates for SARS-CoV2_Beta using the provided antigen sequence, heavy-chain scaffold, and CDRH3 template. Prefer candidates with binding probability >= 0.80 and good developability.",
         DEFAULT_TARGET,
         EXAMPLE_ANTIGEN,
         EXAMPLE_HEAVY,
         EXAMPLE_CDRH3,
+        DEFAULT_AGENT_TARGET_COUNT,
+        0.8,
         4,
     )
 
 
-def explain_current_request(user_request, antigen_name):
-    if not user_request or not str(user_request).strip():
-        return "Please enter a design request first."
-    return agent.explain_request(user_request=user_request, antigen_name=antigen_name)
-
-
-def run_fixed_analysis(analysis_type, accepted_records, history_records):
-    accepted_df = records_to_dataframe(accepted_records)
-    history_df = records_to_dataframe(history_records)
-    return agent.run_analysis(analysis_type, accepted_df, history_df)
-def normalize_chat_content(raw):
-    if isinstance(raw, str):
-        return raw.strip()
-
-    if isinstance(raw, list):
-        texts = []
-        for item in raw:
-            if isinstance(item, dict):
-                if "text" in item:
-                    texts.append(str(item["text"]))
-                elif "content" in item:
-                    texts.append(str(item["content"]))
-            else:
-                texts.append(str(item))
-        return " ".join([t for t in texts if str(t).strip()]).strip()
-
-    if isinstance(raw, dict):
-        if "text" in raw:
-            return str(raw.get("text", "")).strip()
-        if "content" in raw:
-            return str(raw.get("content", "")).strip()
-        return str(raw)
-
-    return str(raw).strip()
-
-
-def send_chat_message(
+def send_analysis_message(
     message,
     chat_history,
-    user_request,
     antigen_name,
     latest_summary_text,
     accepted_records,
@@ -480,7 +515,7 @@ def send_chat_message(
     try:
         answer = agent.answer_question(
             question=message,
-            user_request=user_request,
+            user_request="",
             antigen_name=antigen_name,
             latest_summary=latest_summary_text,
             accepted_df=accepted_df,
@@ -499,11 +534,11 @@ def send_chat_message(
 def clear_chat():
     return []
 
+
 with gr.Blocks(title="Antibody Design Application") as demo:
     latest_summary_state = gr.State("")
     accepted_records_state = gr.State([])
     history_records_state = gr.State([])
-    chat_history_state = gr.State([])
 
     gr.Markdown("""
 # Antibody Design Application
@@ -511,34 +546,32 @@ with gr.Blocks(title="Antibody Design Application") as demo:
 A sequence-driven closed-loop framework for antigen-specific antibody design.
 
 The application supports:
-- **Run Agent**: goal-oriented antibody design using a local LLM controller
-- **Analysis panel**: summary / ranking / bottleneck / threshold / sampling strategy / acceptance diagnostics / round trend
+- **Run Agent**: closed-loop design followed by interactive Q&A analysis
 - **Full pipeline**: Generate → Binding → Developability
 - **Generate**: antigen-conditioned CDRH3 generation
 - **Interaction prediction**: sequence-based antibody–antigen binding prediction
 - **Developability**: sequence-based developability-aware ranking
 
-**Agent note:** The desired candidate count is inferred from the natural-language design request.  
-If the request does not specify a number, the default target is **10**.
+This version uses an OpenAI-compatible API and defaults to OpenRouter free routing.
 """)
 
     with gr.Tabs():
         with gr.Tab("Run Agent"):
             gr.Markdown("""
-### Design-driven agent with fixed analysis buttons
+### Run design and analyze through Q&A
 
-This mode keeps only the **Design request** and an analysis panel.
-After running the agent, click any analysis button to inspect the result.
+This page now does two things only:
+1. run the design agent
+2. analyze the result through a chat window below
+
+Removed from this tab:
+- Design request
+- Explain request
+- Agent summary
 """)
 
             with gr.Row():
                 with gr.Column(scale=2):
-                    agent_request = gr.Textbox(
-                        label="Design request",
-                        lines=5,
-                        placeholder="Example: Please find 25 antibody candidates for SARS-CoV2_Beta with high predicted binding probability and good developability.",
-                    )
-
                     agent_target = gr.Dropdown(
                         choices=AVAILABLE_TARGETS,
                         value=DEFAULT_TARGET,
@@ -562,6 +595,20 @@ After running the agent, click any analysis button to inspect the result.
                         lines=1,
                         value=EXAMPLE_CDRH3,
                     )
+                    agent_target_count = gr.Slider(
+                        minimum=1,
+                        maximum=100,
+                        value=DEFAULT_AGENT_TARGET_COUNT,
+                        step=1,
+                        label="Target candidate count",
+                    )
+                    agent_min_binding = gr.Slider(
+                        minimum=0.0,
+                        maximum=1.0,
+                        value=0.8,
+                        step=0.05,
+                        label="Min binding probability",
+                    )
 
                     agent_max_rounds = gr.Slider(
                         minimum=1,
@@ -574,65 +621,47 @@ After running the agent, click any analysis button to inspect the result.
                     with gr.Row():
                         agent_run_btn = gr.Button("Run Agent")
                         agent_example_btn = gr.Button("Load example")
-                        agent_explain_btn = gr.Button("Explain request")
-
-                    agent_summary = gr.Textbox(label="Agent summary", lines=7)
 
                 with gr.Column(scale=3):
                     agent_accepted = gr.Dataframe(label="Accepted candidates")
                     agent_history = gr.Dataframe(label="Full search history")
 
-            gr.Markdown("### Analysis panel")
-
-            with gr.Row():
-                summary_btn = gr.Button("Summary")
-                ranking_btn = gr.Button("Ranking")
-                bottleneck_btn = gr.Button("Bottleneck")
-                threshold_btn = gr.Button("Threshold")
-
-            with gr.Row():
-                sampling_btn = gr.Button("Sampling Strategy")
-                acceptance_btn = gr.Button("Acceptance Diagnostics")
-                round_trend_btn = gr.Button("Round Trend")
-
-            analysis_output = gr.Textbox(label="Analysis output", lines=14)
-            gr.Markdown("### Open-ended analysis chat")
+            gr.Markdown("### Analysis Q&A")
 
             agent_chatbot = gr.Chatbot(
-                label="Analysis Chat",
-                height=380,
+                label="Run Analysis Chat",
+                height=420,
+                type="messages",
             )
 
             agent_chat_input = gr.Textbox(
                 label="Ask about the current run",
                 lines=2,
-                placeholder="Example: Why were only 8 candidates accepted? Compare the top 2 candidates. What does this result suggest for the next round?",
+                placeholder="Example: Summarize this run. What was the bottleneck? Compare the top 2 accepted candidates.",
             )
 
             with gr.Row():
                 agent_send_btn = gr.Button("Send")
                 agent_clear_chat_btn = gr.Button("Clear chat")
-            
-            
-            
 
             agent_run_btn.click(
                 fn=run_agent,
                 inputs=[
-                    agent_request,
                     agent_target,
                     agent_antigen,
                     agent_heavy,
                     agent_cdrh3,
+                    agent_target_count,
+                    agent_min_binding,
                     agent_max_rounds,
                 ],
                 outputs=[
-                    agent_summary,
                     agent_accepted,
                     agent_history,
                     latest_summary_state,
                     accepted_records_state,
                     history_records_state,
+                    agent_chatbot,
                 ],
             )
 
@@ -640,68 +669,21 @@ After running the agent, click any analysis button to inspect the result.
                 fn=load_agent_example,
                 inputs=[],
                 outputs=[
-                    agent_request,
                     agent_target,
                     agent_antigen,
                     agent_heavy,
                     agent_cdrh3,
+                    agent_target_count,
+                    agent_min_binding, 
                     agent_max_rounds,
                 ],
             )
 
-            agent_explain_btn.click(
-                fn=explain_current_request,
-                inputs=[agent_request, agent_target],
-                outputs=[agent_summary],
-            )
-
-            summary_btn.click(
-                fn=lambda a, h: run_fixed_analysis("summary", a, h),
-                inputs=[accepted_records_state, history_records_state],
-                outputs=[analysis_output],
-            )
-
-            ranking_btn.click(
-                fn=lambda a, h: run_fixed_analysis("ranking", a, h),
-                inputs=[accepted_records_state, history_records_state],
-                outputs=[analysis_output],
-            )
-
-            bottleneck_btn.click(
-                fn=lambda a, h: run_fixed_analysis("bottleneck", a, h),
-                inputs=[accepted_records_state, history_records_state],
-                outputs=[analysis_output],
-            )
-
-            threshold_btn.click(
-                fn=lambda a, h: run_fixed_analysis("threshold", a, h),
-                inputs=[accepted_records_state, history_records_state],
-                outputs=[analysis_output],
-            )
-
-            sampling_btn.click(
-                fn=lambda a, h: run_fixed_analysis("sampling_strategy", a, h),
-                inputs=[accepted_records_state, history_records_state],
-                outputs=[analysis_output],
-            )
-
-            acceptance_btn.click(
-                fn=lambda a, h: run_fixed_analysis("acceptance_diagnostics", a, h),
-                inputs=[accepted_records_state, history_records_state],
-                outputs=[analysis_output],
-            )
-
-            round_trend_btn.click(
-                fn=lambda a, h: run_fixed_analysis("round_trend", a, h),
-                inputs=[accepted_records_state, history_records_state],
-                outputs=[analysis_output],
-            )
             agent_send_btn.click(
-                fn=send_chat_message,
+                fn=send_analysis_message,
                 inputs=[
                     agent_chat_input,
                     agent_chatbot,
-                    agent_request,
                     agent_target,
                     latest_summary_state,
                     accepted_records_state,
@@ -711,11 +693,10 @@ After running the agent, click any analysis button to inspect the result.
             )
 
             agent_chat_input.submit(
-                fn=send_chat_message,
+                fn=send_analysis_message,
                 inputs=[
                     agent_chat_input,
                     agent_chatbot,
-                    agent_request,
                     agent_target,
                     latest_summary_state,
                     accepted_records_state,
@@ -729,11 +710,6 @@ After running the agent, click any analysis button to inspect the result.
                 inputs=[],
                 outputs=[agent_chatbot],
             )
-            
-            
-            
-            
-            
 
         with gr.Tab("Full pipeline"):
             gr.Markdown("""
@@ -745,64 +721,15 @@ This mode runs the full closed-loop workflow in one click:
 
             with gr.Row():
                 with gr.Column(scale=2):
-                    full_antigen = gr.Textbox(
-                        label="Antigen sequence",
-                        lines=8,
-                        placeholder="Paste antigen amino-acid sequence here...",
-                    )
-
-                    full_target = gr.Dropdown(
-                        choices=AVAILABLE_TARGETS,
-                        value=DEFAULT_TARGET,
-                        label="Target name",
-                    )
-
-                    full_template_heavy = gr.Textbox(
-                        label="Template heavy-chain sequence",
-                        lines=5,
-                        placeholder="Paste template heavy-chain sequence here...",
-                    )
-
-                    full_template_cdrh3 = gr.Textbox(
-                        label="Template CDRH3 sequence",
-                        lines=1,
-                        placeholder="Paste template CDRH3 here...",
-                    )
-
-                    full_num_samples = gr.Slider(
-                        minimum=1,
-                        maximum=100,
-                        value=16,
-                        step=1,
-                        label="Number of samples",
-                    )
-
-                    full_min_len = gr.Slider(
-                        minimum=4,
-                        maximum=20,
-                        value=8,
-                        step=1,
-                        label="Minimum CDRH3 length",
-                    )
-
-                    full_sample_mode = gr.Dropdown(
-                        choices=["sample", "argmax"],
-                        value="sample",
-                        label="Sampling mode",
-                    )
-
-                    full_temperature = gr.Slider(
-                        minimum=0.2,
-                        maximum=2.0,
-                        value=1.0,
-                        step=0.1,
-                        label="Temperature",
-                    )
-
-                    full_deduplicate = gr.Checkbox(
-                        value=True,
-                        label="Remove duplicates",
-                    )
+                    full_antigen = gr.Textbox(label="Antigen sequence", lines=8)
+                    full_target = gr.Dropdown(choices=AVAILABLE_TARGETS, value=DEFAULT_TARGET, label="Target name")
+                    full_template_heavy = gr.Textbox(label="Template heavy-chain sequence", lines=5)
+                    full_template_cdrh3 = gr.Textbox(label="Template CDRH3 sequence", lines=1)
+                    full_num_samples = gr.Slider(minimum=1, maximum=100, value=16, step=1, label="Number of samples")
+                    full_min_len = gr.Slider(minimum=4, maximum=20, value=8, step=1, label="Minimum CDRH3 length")
+                    full_sample_mode = gr.Dropdown(choices=["sample", "argmax"], value="sample", label="Sampling mode")
+                    full_temperature = gr.Slider(minimum=0.2, maximum=2.0, value=1.0, step=0.1, label="Temperature")
+                    full_deduplicate = gr.Checkbox(value=True, label="Remove duplicates")
 
                     with gr.Row():
                         full_run_btn = gr.Button("Run Full Pipeline")
@@ -846,53 +773,14 @@ This mode runs the full closed-loop workflow in one click:
             )
 
         with gr.Tab("Generate"):
-            gr.Markdown("""
-### Module purpose
-This module generates candidate **CDRH3 sequences** conditioned on an antigen sequence.
-""")
-
             with gr.Row():
                 with gr.Column(scale=2):
-                    antigen_generate = gr.Textbox(
-                        label="Antigen sequence",
-                        lines=8,
-                        placeholder="Paste antigen amino-acid sequence here...",
-                    )
-
-                    num_samples = gr.Slider(
-                        minimum=1,
-                        maximum=200,
-                        value=32,
-                        step=1,
-                        label="Number of samples",
-                    )
-
-                    min_len = gr.Slider(
-                        minimum=4,
-                        maximum=20,
-                        value=8,
-                        step=1,
-                        label="Minimum CDRH3 length",
-                    )
-
-                    sample_mode = gr.Dropdown(
-                        choices=["sample", "argmax"],
-                        value="sample",
-                        label="Sampling mode",
-                    )
-
-                    temperature = gr.Slider(
-                        minimum=0.2,
-                        maximum=2.0,
-                        value=1.0,
-                        step=0.1,
-                        label="Temperature",
-                    )
-
-                    deduplicate = gr.Checkbox(
-                        value=True,
-                        label="Remove duplicates",
-                    )
+                    antigen_generate = gr.Textbox(label="Antigen sequence", lines=8)
+                    num_samples = gr.Slider(minimum=1, maximum=200, value=32, step=1, label="Number of samples")
+                    min_len = gr.Slider(minimum=4, maximum=20, value=8, step=1, label="Minimum CDRH3 length")
+                    sample_mode = gr.Dropdown(choices=["sample", "argmax"], value="sample", label="Sampling mode")
+                    temperature = gr.Slider(minimum=0.2, maximum=2.0, value=1.0, step=0.1, label="Temperature")
+                    deduplicate = gr.Checkbox(value=True, label="Remove duplicates")
 
                     with gr.Row():
                         generate_btn = gr.Button("Generate")
@@ -904,49 +792,21 @@ This module generates candidate **CDRH3 sequences** conditioned on an antigen se
 
             generate_btn.click(
                 fn=run_generation,
-                inputs=[
-                    antigen_generate,
-                    num_samples,
-                    min_len,
-                    sample_mode,
-                    temperature,
-                    deduplicate,
-                ],
+                inputs=[antigen_generate, num_samples, min_len, sample_mode, temperature, deduplicate],
                 outputs=[generate_summary, generate_table],
             )
 
             generate_example_btn.click(
                 fn=load_generate_example,
                 inputs=[],
-                outputs=[
-                    antigen_generate,
-                    num_samples,
-                    min_len,
-                    sample_mode,
-                    temperature,
-                    deduplicate,
-                ],
+                outputs=[antigen_generate, num_samples, min_len, sample_mode, temperature, deduplicate],
             )
 
         with gr.Tab("Interaction prediction"):
-            gr.Markdown("""
-### Module purpose
-This module predicts the probability that an antibody heavy chain interacts with an antigen sequence.
-""")
-
             with gr.Row():
                 with gr.Column(scale=2):
-                    heavy_input = gr.Textbox(
-                        label="Heavy-chain sequence",
-                        lines=6,
-                        placeholder="Paste heavy-chain amino-acid sequence here...",
-                    )
-
-                    antigen_bind = gr.Textbox(
-                        label="Antigen sequence",
-                        lines=8,
-                        placeholder="Paste antigen amino-acid sequence here...",
-                    )
+                    heavy_input = gr.Textbox(label="Heavy-chain sequence", lines=6)
+                    antigen_bind = gr.Textbox(label="Antigen sequence", lines=8)
 
                     with gr.Row():
                         bind_btn = gr.Button("Predict binding")
@@ -969,29 +829,13 @@ This module predicts the probability that an antibody heavy chain interacts with
             )
 
         with gr.Tab("Developability"):
-            gr.Markdown("""
-### Module purpose
-This module evaluates antibody candidates using **sequence-based developability criteria**
-and ranks them relative to antibodies associated with the same antigen.
-""")
-
             with gr.Row():
                 with gr.Column(scale=2):
-                    target_dropdown = gr.Dropdown(
-                        choices=AVAILABLE_TARGETS,
-                        value=DEFAULT_TARGET,
-                        label="Target name",
-                    )
-
-                    gr.Markdown("### Candidate C1")
+                    target_dropdown = gr.Dropdown(choices=AVAILABLE_TARGETS, value=DEFAULT_TARGET, label="Target name")
                     heavy1 = gr.Textbox(label="Heavy 1", lines=4)
                     cdr31 = gr.Textbox(label="CDRH3 1", lines=1)
-
-                    gr.Markdown("### Candidate C2")
                     heavy2 = gr.Textbox(label="Heavy 2", lines=4)
                     cdr32 = gr.Textbox(label="CDRH3 2", lines=1)
-
-                    gr.Markdown("### Candidate C3")
                     heavy3 = gr.Textbox(label="Heavy 3", lines=4)
                     cdr33 = gr.Textbox(label="CDRH3 3", lines=1)
 
@@ -1006,24 +850,20 @@ and ranks them relative to antibodies associated with the same antigen.
 
             dev_btn.click(
                 fn=run_developability_ranking,
-                inputs=[
-                    target_dropdown,
-                    heavy1, cdr31,
-                    heavy2, cdr32,
-                    heavy3, cdr33,
-                ],
+                inputs=[target_dropdown, heavy1, cdr31, heavy2, cdr32, heavy3, cdr33],
                 outputs=[dev_summary, dev_table, dev_plot],
             )
 
             dev_example_btn.click(
                 fn=load_developability_example,
                 inputs=[],
-                outputs=[
-                    target_dropdown,
-                    heavy1, cdr31,
-                    heavy2, cdr32,
-                    heavy3, cdr33,
-                ],
+                outputs=[target_dropdown, heavy1, cdr31, heavy2, cdr32, heavy3, cdr33],
             )
 
-demo.launch(server_name="127.0.0.1", server_port=7860)
+
+
+demo.launch(
+    server_name="127.0.0.1",
+    server_port=7860,
+    share=True,
+)
