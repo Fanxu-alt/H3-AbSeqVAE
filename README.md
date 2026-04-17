@@ -37,8 +37,8 @@ Antigen sequence
 - numpy
 - matplotlib
 - seaborn
-- gradio==4.44.1
-- gradio_client==1.3.0
+- gradio
+- gradio_client
 - ANARCI (for CDRH3 extraction)
 
 ## Quick Start
