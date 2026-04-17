@@ -85,6 +85,8 @@ A public online demo is available at:
 https://huggingface.co/spaces/Fanxu-alt/Antibody-Design-App
 
 ### Notes
+This agent uses a deterministic heuristic controller rather than a local large language model.
+
 Due to computational and deployment constraints. To use the full pipeline (including the agent), please run the application locally.
 
 ## Pretrained Models
