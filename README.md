@@ -85,7 +85,7 @@ A public online demo is available at:
 https://huggingface.co/spaces/Fanxu-alt/Antibody-Design-App
 
 ### Notes
-The online demo is provided for accessibility and interactive exploration. In practice, performance may be affected by API latency and rate limits. For large-scale design tasks or extended iterative runs, we recommend using the local deployment.
+The online demo is provided for accessibility and interactive exploration. Availability may depend on deployment resources and API configuration.
 
 ## Pretrained Models
 
