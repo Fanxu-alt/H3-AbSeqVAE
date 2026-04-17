@@ -9,9 +9,9 @@ import pandas as pd
 from openai import OpenAI
 
 
-DEFAULT_OPENROUTER_MODEL = os.getenv("ANTIBODY_LLM_MODEL", "openrouter/free")
-DEFAULT_OPENROUTER_BASE_URL = os.getenv("ANTIBODY_LLM_BASE_URL", "https://openrouter.ai/api/v1")
-DEFAULT_OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+DEFAULT_OPENROUTER_MODEL = os.getenv("ANTIBODY_LLM_MODEL", "gpt-4o-mini")
+DEFAULT_OPENROUTER_BASE_URL = os.getenv("ANTIBODY_LLM_BASE_URL", "https://api.openai.com/v1")
+DEFAULT_OPENROUTER_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 
 def _extract_first_json_object(text: str) -> Dict[str, Any]:
