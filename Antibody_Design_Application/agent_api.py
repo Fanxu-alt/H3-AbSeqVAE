@@ -495,6 +495,139 @@ JSON schema:
             return f"Unknown analysis type: {analysis_type}"
 
         return fn(accepted_df, history_df)
+    
+    def answer_question(
+        self,
+        question: str,
+        user_request: str = "",
+        antigen_name: str = "",
+        latest_summary: str = "",
+        accepted_df: Optional[pd.DataFrame] = None,
+        history_df: Optional[pd.DataFrame] = None,
+        chat_history: Optional[List[Dict[str, str]]] = None,
+    ) -> str:
+        accepted_df = accepted_df if accepted_df is not None else pd.DataFrame()
+        history_df = history_df if history_df is not None else pd.DataFrame()
+        chat_history = chat_history or []
+
+        accepted_preview = accepted_df.head(8).to_dict(orient="records") if len(accepted_df) > 0 else []
+        history_preview = history_df.head(12).to_dict(orient="records") if len(history_df) > 0 else []
+        reject_counts = self._reject_counts(history_df)
+        accepted_stats = self._build_table_stats(accepted_df)
+        history_stats = self._build_table_stats(history_df)
+        history_text = self._chat_history_to_text(chat_history, max_turns=6)
+
+        system_prompt = """
+You are an antibody design analysis assistant.
+
+Your role:
+- answer open-ended questions about the current antibody-design run,
+- explain accepted candidates, rejected candidates, bottlenecks, thresholds, and round trends,
+- stay grounded in the provided run results,
+- do not invent facts not supported by the provided tables and summary,
+- do not switch to unrelated generic AI/ML explanations.
+
+Rules:
+- If there are no accepted candidates, say so clearly.
+- Prefer concise, factual answers.
+- If the user asks for interpretation, base it on the provided statistics.
+- If evidence is insufficient, explicitly say what is known and what is uncertain.
+"""
+
+        user_prompt = f"""
+User question:
+{question}
+
+Current design request:
+{user_request}
+
+Current antigen:
+{antigen_name}
+
+Latest run summary:
+{latest_summary}
+
+Accepted stats:
+{json.dumps(accepted_stats, ensure_ascii=False, indent=2)}
+
+History stats:
+{json.dumps(history_stats, ensure_ascii=False, indent=2)}
+
+Reject counts:
+{json.dumps(reject_counts, ensure_ascii=False, indent=2)}
+
+Accepted preview:
+{json.dumps(accepted_preview, ensure_ascii=False, indent=2)}
+
+History preview:
+{json.dumps(history_preview, ensure_ascii=False, indent=2)}
+
+Recent conversation:
+{history_text}
+
+Please answer the user's question based only on the current antibody-design task and results.
+"""
+
+        try:
+            return self._chat_text(system_prompt, user_prompt, temperature=0.2)
+        except Exception as e:
+            return f"Error while generating answer: {str(e)}"
+
+    def _chat_history_to_text(self, chat_history: List[Dict[str, str]], max_turns: int = 6) -> str:
+        if not chat_history:
+            return ""
+
+        trimmed = chat_history[-2 * max_turns:]
+        parts = []
+
+        for msg in trimmed:
+            if not isinstance(msg, dict):
+                continue
+
+            role = str(msg.get("role", "")).strip().lower()
+            content = self._normalize_chat_content(msg.get("content", ""))
+
+            if not content:
+                continue
+
+            if role == "user":
+                parts.append(f"User: {content}")
+            elif role == "assistant":
+                parts.append(f"Assistant: {content}")
+            else:
+                parts.append(f"{role}: {content}")
+
+        return "\n".join(parts)
+
+    def _normalize_chat_content(self, raw: Any) -> str:
+        if isinstance(raw, str):
+            return raw.strip()
+
+        if isinstance(raw, list):
+            texts = []
+            for item in raw:
+                if isinstance(item, dict):
+                    if "text" in item:
+                        texts.append(str(item["text"]))
+                    elif "content" in item:
+                        texts.append(str(item["content"]))
+                else:
+                    texts.append(str(item))
+            return " ".join([t for t in texts if str(t).strip()]).strip()
+
+        if isinstance(raw, dict):
+            if "text" in raw:
+                return str(raw.get("text", "")).strip()
+            if "content" in raw:
+                return str(raw.get("content", "")).strip()
+            return json.dumps(raw, ensure_ascii=False)
+
+        return str(raw).strip()
+    
+    
+    
+    
+    
 
     def _analysis_summary(self, accepted_df: pd.DataFrame, history_df: pd.DataFrame) -> str:
         accepted_n = len(accepted_df)
