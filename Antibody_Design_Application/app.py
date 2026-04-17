@@ -38,7 +38,7 @@ agent = AntibodyDesignAgent(
     generator=generator,
     binder=binder,
     ranker=ranker,
-    llm_model="qwen2.5:1.5b-instruct",
+    llm_model="qwen3:8b",
     base_url="http://127.0.0.1:11434/v1",
     api_key="ollama",
     output_dir=str(OUTPUT_DIR),
@@ -433,12 +433,77 @@ def run_fixed_analysis(analysis_type, accepted_records, history_records):
     accepted_df = records_to_dataframe(accepted_records)
     history_df = records_to_dataframe(history_records)
     return agent.run_analysis(analysis_type, accepted_df, history_df)
+def normalize_chat_content(raw):
+    if isinstance(raw, str):
+        return raw.strip()
 
+    if isinstance(raw, list):
+        texts = []
+        for item in raw:
+            if isinstance(item, dict):
+                if "text" in item:
+                    texts.append(str(item["text"]))
+                elif "content" in item:
+                    texts.append(str(item["content"]))
+            else:
+                texts.append(str(item))
+        return " ".join([t for t in texts if str(t).strip()]).strip()
+
+    if isinstance(raw, dict):
+        if "text" in raw:
+            return str(raw.get("text", "")).strip()
+        if "content" in raw:
+            return str(raw.get("content", "")).strip()
+        return str(raw)
+
+    return str(raw).strip()
+
+
+def send_chat_message(
+    message,
+    chat_history,
+    user_request,
+    antigen_name,
+    latest_summary_text,
+    accepted_records,
+    history_records,
+):
+    chat_history = chat_history or []
+    message = str(message or "").strip()
+
+    if not message:
+        return chat_history, ""
+
+    accepted_df = records_to_dataframe(accepted_records)
+    history_df = records_to_dataframe(history_records)
+
+    try:
+        answer = agent.answer_question(
+            question=message,
+            user_request=user_request,
+            antigen_name=antigen_name,
+            latest_summary=latest_summary_text,
+            accepted_df=accepted_df,
+            history_df=history_df,
+            chat_history=chat_history,
+        )
+    except Exception as e:
+        answer = f"Error while generating answer: {str(e)}"
+
+    new_history = list(chat_history)
+    new_history.append({"role": "user", "content": message})
+    new_history.append({"role": "assistant", "content": normalize_chat_content(answer)})
+    return new_history, ""
+
+
+def clear_chat():
+    return []
 
 with gr.Blocks(title="Antibody Design Application") as demo:
     latest_summary_state = gr.State("")
     accepted_records_state = gr.State([])
     history_records_state = gr.State([])
+    chat_history_state = gr.State([])
 
     gr.Markdown("""
 # Antibody Design Application
@@ -531,6 +596,25 @@ After running the agent, click any analysis button to inspect the result.
                 round_trend_btn = gr.Button("Round Trend")
 
             analysis_output = gr.Textbox(label="Analysis output", lines=14)
+            gr.Markdown("### Open-ended analysis chat")
+
+            agent_chatbot = gr.Chatbot(
+                label="Analysis Chat",
+                height=380,
+            )
+
+            agent_chat_input = gr.Textbox(
+                label="Ask about the current run",
+                lines=2,
+                placeholder="Example: Why were only 8 candidates accepted? Compare the top 2 candidates. What does this result suggest for the next round?",
+            )
+
+            with gr.Row():
+                agent_send_btn = gr.Button("Send")
+                agent_clear_chat_btn = gr.Button("Clear chat")
+            
+            
+            
 
             agent_run_btn.click(
                 fn=run_agent,
@@ -612,6 +696,44 @@ After running the agent, click any analysis button to inspect the result.
                 inputs=[accepted_records_state, history_records_state],
                 outputs=[analysis_output],
             )
+            agent_send_btn.click(
+                fn=send_chat_message,
+                inputs=[
+                    agent_chat_input,
+                    agent_chatbot,
+                    agent_request,
+                    agent_target,
+                    latest_summary_state,
+                    accepted_records_state,
+                    history_records_state,
+                ],
+                outputs=[agent_chatbot, agent_chat_input],
+            )
+
+            agent_chat_input.submit(
+                fn=send_chat_message,
+                inputs=[
+                    agent_chat_input,
+                    agent_chatbot,
+                    agent_request,
+                    agent_target,
+                    latest_summary_state,
+                    accepted_records_state,
+                    history_records_state,
+                ],
+                outputs=[agent_chatbot, agent_chat_input],
+            )
+
+            agent_clear_chat_btn.click(
+                fn=clear_chat,
+                inputs=[],
+                outputs=[agent_chatbot],
+            )
+            
+            
+            
+            
+            
 
         with gr.Tab("Full pipeline"):
             gr.Markdown("""
