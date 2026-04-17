@@ -637,13 +637,11 @@ This version uses an OpenAI-compatible API backend configured via environment va
         with gr.Tab("Run Agent"):
             gr.Markdown(
                 """
-### Run design and analyze through Q&A
+### Design and analysis workspace
 
-This page now does two things:
-1. run the design agent
-2. analyze the result through a chat window below
+Run the antibody design agent and discuss the results in the chat panel below.
 
-You can also chat before running the agent.
+You can also ask general questions before starting a run.
 """
             )
 
