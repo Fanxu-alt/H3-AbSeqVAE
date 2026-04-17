@@ -32,11 +32,6 @@ EXAMPLE_HEAVY = (
 EXAMPLE_CDRH3 = "ARDLEMAGAFDI"
 DEFAULT_AGENT_TARGET_COUNT = 10
 
-
-# =========================
-# Build core modules
-# =========================
-
 def build_agent() -> AntibodyDesignAgent:
     generator = AntibodyGenerator(GEN_MODEL_PATH)
     binder = AntibodyBinder(BINDER_MODEL_PATH)
@@ -68,10 +63,6 @@ DEFAULT_TARGET = EXAMPLE_TARGET if EXAMPLE_TARGET in AVAILABLE_TARGETS else (
     AVAILABLE_TARGETS[0] if AVAILABLE_TARGETS else None
 )
 
-
-# =========================
-# Utilities
-# =========================
 
 def graft_cdrh3_into_heavy(template_heavy: str, template_cdrh3: str, new_cdrh3: str) -> str:
     template_heavy = str(template_heavy).strip().upper()
@@ -152,10 +143,6 @@ def history_pairs_to_text(history, max_turns: int = 6) -> str:
     return "\n".join(parts)
 
 
-# =========================
-# Generate tab
-# =========================
-
 def run_generation(antigen, num_samples, min_len, sample_mode, temperature, deduplicate):
     try:
         if not antigen or not str(antigen).strip():
@@ -189,10 +176,6 @@ def load_generate_example():
     return EXAMPLE_ANTIGEN, 32, 8, "sample", 1.0, True
 
 
-# =========================
-# Binding tab
-# =========================
-
 def run_binding_prediction(heavy, antigen):
     try:
         if not heavy or not str(heavy).strip():
@@ -217,9 +200,6 @@ def load_bind_example():
     return EXAMPLE_HEAVY, EXAMPLE_ANTIGEN
 
 
-# =========================
-# Developability tab
-# =========================
 
 def run_developability_ranking(
     target_name,
@@ -302,10 +282,6 @@ def load_developability_example():
         "",
     )
 
-
-# =========================
-# Full pipeline tab
-# =========================
 
 def run_full_pipeline(
     antigen,
@@ -453,9 +429,6 @@ def load_full_pipeline_example():
     )
 
 
-# =========================
-# Agent run
-# =========================
 
 def run_agent(
     antigen_name,
@@ -522,9 +495,6 @@ def load_agent_example():
     )
 
 
-# =========================
-# ChatInterface callback
-# =========================
 
 def chat_with_run_context(
     message,
@@ -569,7 +539,6 @@ There is no completed design run yet.
             )
             return normalize_chat_content(answer)
 
-        # Convert pair history into plain text for context
         history_text = history_pairs_to_text(history, max_turns=6)
 
         answer = agent._chat_text(
@@ -606,10 +575,6 @@ Recent conversation:
     except Exception as e:
         return f"Error while generating answer: {str(e)}"
 
-
-# =========================
-# UI
-# =========================
 
 with gr.Blocks(title="Antibody Design Application") as demo:
     latest_summary_state = gr.State("")
@@ -915,7 +880,6 @@ This mode runs the full closed-loop workflow in one click:
                 inputs=[],
                 outputs=[target_dropdown, heavy1, cdr31, heavy2, cdr32, heavy3, cdr33],
             )
-
 
 
 
