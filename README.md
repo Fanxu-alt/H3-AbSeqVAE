@@ -85,9 +85,7 @@ A public online demo is available at:
 https://huggingface.co/spaces/Fanxu-alt/Antibody-Design-App
 
 ### Notes
-The **goal-oriented antibody design agent** is **not included** in the online demo due to computational and deployment constraints.
-
-To use the full pipeline (including the agent), please run the application locally.
+Due to computational and deployment constraints. To use the full pipeline (including the agent), please run the application locally.
 
 ## Pretrained Models
 
