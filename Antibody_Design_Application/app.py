@@ -3,6 +3,7 @@ import os
 
 import gradio as gr
 import pandas as pd
+from huggingface_hub import hf_hub_download
 
 from generate_api import AntibodyGenerator
 from binder_api import AntibodyBinder
@@ -11,9 +12,11 @@ from agent_api import AntibodyDesignAgent
 
 GEN_MODEL_PATH = "models/conditional_cvae_finetune.pt"
 BINDER_MODEL_PATH = "models/best_esm2_cross_attention.pt"
+
+
 DEV_CSV_PATH = "filtered_Label_1.csv"
 
-OUTPUT_DIR = Path("outputs")
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "outputs"))
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 EXAMPLE_ANTIGEN = (
@@ -30,6 +33,10 @@ EXAMPLE_CDRH3 = "ARDLEMAGAFDI"
 DEFAULT_AGENT_TARGET_COUNT = 10
 
 
+# =========================
+# Build core modules
+# =========================
+
 def build_agent() -> AntibodyDesignAgent:
     generator = AntibodyGenerator(GEN_MODEL_PATH)
     binder = AntibodyBinder(BINDER_MODEL_PATH)
@@ -44,9 +51,11 @@ def build_agent() -> AntibodyDesignAgent:
         api_key=os.getenv("OPENAI_API_KEY", ""),
         output_dir=str(OUTPUT_DIR),
         app_name="Antibody Design Application",
-        app_url="http://127.0.0.1:7860",
+        app_url=os.getenv(
+            "ANTIBODY_APP_URL",
+            "https://huggingface.co/spaces/Fanxu-alt/Antibody-Design-App",
+        ),
     )
-
 
 
 agent = build_agent()
@@ -59,6 +68,10 @@ DEFAULT_TARGET = EXAMPLE_TARGET if EXAMPLE_TARGET in AVAILABLE_TARGETS else (
     AVAILABLE_TARGETS[0] if AVAILABLE_TARGETS else None
 )
 
+
+# =========================
+# Utilities
+# =========================
 
 def graft_cdrh3_into_heavy(template_heavy: str, template_cdrh3: str, new_cdrh3: str) -> str:
     template_heavy = str(template_heavy).strip().upper()
@@ -116,6 +129,33 @@ def normalize_chat_content(raw):
     return str(raw).strip()
 
 
+def history_pairs_to_text(history, max_turns: int = 6) -> str:
+    """
+    ChatInterface default history format:
+    history = [[user_msg, assistant_msg], ...]
+    or list of tuples.
+    """
+    if not history:
+        return ""
+
+    trimmed = history[-max_turns:]
+    parts = []
+
+    for item in trimmed:
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            user_msg, assistant_msg = item
+            if str(user_msg).strip():
+                parts.append(f"User: {str(user_msg).strip()}")
+            if str(assistant_msg).strip():
+                parts.append(f"Assistant: {str(assistant_msg).strip()}")
+
+    return "\n".join(parts)
+
+
+# =========================
+# Generate tab
+# =========================
+
 def run_generation(antigen, num_samples, min_len, sample_mode, temperature, deduplicate):
     try:
         if not antigen or not str(antigen).strip():
@@ -149,6 +189,10 @@ def load_generate_example():
     return EXAMPLE_ANTIGEN, 32, 8, "sample", 1.0, True
 
 
+# =========================
+# Binding tab
+# =========================
+
 def run_binding_prediction(heavy, antigen):
     try:
         if not heavy or not str(heavy).strip():
@@ -172,6 +216,10 @@ def run_binding_prediction(heavy, antigen):
 def load_bind_example():
     return EXAMPLE_HEAVY, EXAMPLE_ANTIGEN
 
+
+# =========================
+# Developability tab
+# =========================
 
 def run_developability_ranking(
     target_name,
@@ -254,6 +302,10 @@ def load_developability_example():
         "",
     )
 
+
+# =========================
+# Full pipeline tab
+# =========================
 
 def run_full_pipeline(
     antigen,
@@ -401,6 +453,10 @@ def load_full_pipeline_example():
     )
 
 
+# =========================
+# Agent run
+# =========================
+
 def run_agent(
     antigen_name,
     antigen_sequence,
@@ -413,15 +469,15 @@ def run_agent(
     try:
         if not antigen_sequence or not str(antigen_sequence).strip():
             msg = "Please provide an antigen sequence."
-            return pd.DataFrame(), pd.DataFrame(), msg, [], [], [{"role": "assistant", "content": msg}]
+            return pd.DataFrame(), pd.DataFrame(), msg, [], []
 
         if not heavy_template or not str(heavy_template).strip():
             msg = "Please provide a heavy-chain template."
-            return pd.DataFrame(), pd.DataFrame(), msg, [], [], [{"role": "assistant", "content": msg}]
+            return pd.DataFrame(), pd.DataFrame(), msg, [], []
 
         if not cdrh3_template or not str(cdrh3_template).strip():
             msg = "Please provide a CDRH3 template."
-            return pd.DataFrame(), pd.DataFrame(), msg, [], [], [{"role": "assistant", "content": msg}]
+            return pd.DataFrame(), pd.DataFrame(), msg, [], []
 
         target_count = int(target_count)
 
@@ -429,17 +485,7 @@ def run_agent(
             f"Please find {target_count} antibody candidates for {antigen_name} "
             f"with high predicted binding probability and good developability."
         )
-        plan = agent.make_initial_plan(
-            user_request=default_request,
-            antigen_name=antigen_name,
-            antigen_sequence=antigen_sequence,
-            heavy_template=heavy_template,
-            cdrh3_template=cdrh3_template,
-            default_target_count=target_count,
-            max_rounds=max_rounds,
-        )
 
-        plan.min_binding_probability = float(min_binding_probability)
         summary, accepted_df, history_df = agent.run(
             user_request=default_request,
             antigen_name=antigen_name,
@@ -448,26 +494,8 @@ def run_agent(
             cdrh3_template=cdrh3_template,
             default_target_count=int(target_count),
             max_rounds=int(max_rounds),
-            min_binding_probability=float(min_binding_probability),  
+            min_binding_probability=float(min_binding_probability),
         )
-
-      
-
-        chat_seed = [
-            {"role": "assistant", "content": normalize_chat_content(summary)},
-            {
-                "role": "assistant",
-                "content": (
-                    "Design run completed. You can now ask questions here, for example:\n"
-                    "- Summarize this run\n"
-                    "- Rank the top candidates\n"
-                    "- Why were candidates rejected?\n"
-                    "- What is the bottleneck?\n"
-                    "- Compare the top 2 accepted candidates\n"
-                    "- What should the next round change?"
-                ),
-            },
-        ]
 
         return (
             accepted_df,
@@ -475,12 +503,11 @@ def run_agent(
             summary,
             dataframe_to_records(accepted_df),
             dataframe_to_records(history_df),
-            chat_seed,
         )
 
     except Exception as e:
         msg = f"Error: {str(e)}"
-        return pd.DataFrame(), pd.DataFrame(), msg, [], [], [{"role": "assistant", "content": msg}]
+        return pd.DataFrame(), pd.DataFrame(), msg, [], []
 
 
 def load_agent_example():
@@ -495,52 +522,102 @@ def load_agent_example():
     )
 
 
-def send_analysis_message(
+# =========================
+# ChatInterface callback
+# =========================
+
+def chat_with_run_context(
     message,
-    chat_history,
+    history,
     antigen_name,
     latest_summary_text,
     accepted_records,
     history_records,
 ):
-    chat_history = chat_history or []
     message = str(message or "").strip()
-
     if not message:
-        return chat_history, ""
+        return "Please enter a message."
 
     accepted_df = records_to_dataframe(accepted_records)
     history_df = records_to_dataframe(history_records)
 
     try:
-        answer = agent.answer_question(
-            question=message,
-            user_request="",
-            antigen_name=antigen_name,
-            latest_summary=latest_summary_text,
-            accepted_df=accepted_df,
-            history_df=history_df,
-            chat_history=chat_history,
+        if len(accepted_df) == 0 and len(history_df) == 0:
+            history_text = history_pairs_to_text(history, max_turns=6)
+
+            answer = agent._chat_text(
+                system_prompt="""
+You are an antibody design assistant.
+Answer general questions about antibody design, antigen-specific design,
+CDRH3 generation, binding prediction, and developability.
+Be concise, helpful, and scientifically grounded.
+If the user asks about current run results, explain that no run has been executed yet.
+""",
+                user_prompt=f"""
+User question:
+{message}
+
+Current target:
+{antigen_name}
+
+Recent conversation:
+{history_text}
+
+There is no completed design run yet.
+""",
+                temperature=0.3,
+            )
+            return normalize_chat_content(answer)
+
+        # Convert pair history into plain text for context
+        history_text = history_pairs_to_text(history, max_turns=6)
+
+        answer = agent._chat_text(
+            system_prompt="""
+You are an antibody design analysis assistant.
+Answer questions about the current run.
+Stay grounded in the provided results.
+Do not invent unsupported facts.
+Be concise and factual.
+""",
+            user_prompt=f"""
+User question:
+{message}
+
+Current antigen:
+{antigen_name}
+
+Latest run summary:
+{latest_summary_text}
+
+Accepted stats:
+{records_to_dataframe(accepted_records).head(8).to_dict(orient="records")}
+
+History stats:
+{records_to_dataframe(history_records).head(12).to_dict(orient="records")}
+
+Recent conversation:
+{history_text}
+""",
+            temperature=0.2,
         )
+        return normalize_chat_content(answer)
+
     except Exception as e:
-        answer = f"Error while generating answer: {str(e)}"
-
-    new_history = list(chat_history)
-    new_history.append({"role": "user", "content": message})
-    new_history.append({"role": "assistant", "content": normalize_chat_content(answer)})
-    return new_history, ""
+        return f"Error while generating answer: {str(e)}"
 
 
-def clear_chat():
-    return []
-
+# =========================
+# UI
+# =========================
 
 with gr.Blocks(title="Antibody Design Application") as demo:
     latest_summary_state = gr.State("")
     accepted_records_state = gr.State([])
     history_records_state = gr.State([])
 
-    gr.Markdown("""
+    gr.Markdown(
+        """
 # Antibody Design Application
 
 A sequence-driven closed-loop framework for antigen-specific antibody design.
@@ -552,23 +629,23 @@ The application supports:
 - **Interaction prediction**: sequence-based antibody–antigen binding prediction
 - **Developability**: sequence-based developability-aware ranking
 
-This version uses an OpenAI-compatible API and defaults to OpenRouter free routing.
-""")
+This version uses an OpenAI-compatible API backend configured via environment variables.
+"""
+    )
 
     with gr.Tabs():
         with gr.Tab("Run Agent"):
-            gr.Markdown("""
+            gr.Markdown(
+                """
 ### Run design and analyze through Q&A
 
-This page now does two things only:
+This page now does two things:
 1. run the design agent
 2. analyze the result through a chat window below
 
-Removed from this tab:
-- Design request
-- Explain request
-- Agent summary
-""")
+You can also chat before running the agent.
+"""
+            )
 
             with gr.Row():
                 with gr.Column(scale=2):
@@ -595,6 +672,7 @@ Removed from this tab:
                         lines=1,
                         value=EXAMPLE_CDRH3,
                     )
+
                     agent_target_count = gr.Slider(
                         minimum=1,
                         maximum=100,
@@ -602,6 +680,7 @@ Removed from this tab:
                         step=1,
                         label="Target candidate count",
                     )
+
                     agent_min_binding = gr.Slider(
                         minimum=0.0,
                         maximum=1.0,
@@ -628,21 +707,30 @@ Removed from this tab:
 
             gr.Markdown("### Analysis Q&A")
 
-            agent_chatbot = gr.Chatbot(
+            analysis_chatbot = gr.Chatbot(
                 label="Run Analysis Chat",
                 height=420,
-                type="messages",
             )
-
-            agent_chat_input = gr.Textbox(
-                label="Ask about the current run",
-                lines=2,
-                placeholder="Example: Summarize this run. What was the bottleneck? Compare the top 2 accepted candidates.",
+            analysis_chat = gr.ChatInterface(
+                fn=chat_with_run_context,
+                chatbot=analysis_chatbot,
+                additional_inputs=[
+                    agent_target,
+                    latest_summary_state,
+                    accepted_records_state,
+                    history_records_state,
+                ],
+                examples=[
+                    ["Summarize this run."],
+                    ["What was the bottleneck?"],
+                    ["Compare the top 2 accepted candidates."],
+                    ["Why were candidates rejected?"],
+                    ["What should the next round change?"],
+                    ["What does developability risk score mean?"],
+                    ["How should I think about CDRH3 design before running the agent?"],
+                ],
+                description="You can chat before or after running the agent.",
             )
-
-            with gr.Row():
-                agent_send_btn = gr.Button("Send")
-                agent_clear_chat_btn = gr.Button("Clear chat")
 
             agent_run_btn.click(
                 fn=run_agent,
@@ -661,7 +749,6 @@ Removed from this tab:
                     latest_summary_state,
                     accepted_records_state,
                     history_records_state,
-                    agent_chatbot,
                 ],
             )
 
@@ -674,50 +761,21 @@ Removed from this tab:
                     agent_heavy,
                     agent_cdrh3,
                     agent_target_count,
-                    agent_min_binding, 
+                    agent_min_binding,
                     agent_max_rounds,
                 ],
             )
 
-            agent_send_btn.click(
-                fn=send_analysis_message,
-                inputs=[
-                    agent_chat_input,
-                    agent_chatbot,
-                    agent_target,
-                    latest_summary_state,
-                    accepted_records_state,
-                    history_records_state,
-                ],
-                outputs=[agent_chatbot, agent_chat_input],
-            )
-
-            agent_chat_input.submit(
-                fn=send_analysis_message,
-                inputs=[
-                    agent_chat_input,
-                    agent_chatbot,
-                    agent_target,
-                    latest_summary_state,
-                    accepted_records_state,
-                    history_records_state,
-                ],
-                outputs=[agent_chatbot, agent_chat_input],
-            )
-
-            agent_clear_chat_btn.click(
-                fn=clear_chat,
-                inputs=[],
-                outputs=[agent_chatbot],
-            )
-
         with gr.Tab("Full pipeline"):
-            gr.Markdown("""
+            gr.Markdown(
+                """
 ### Module purpose
+
 This mode runs the full closed-loop workflow in one click:
 
 **Antigen sequence → generate CDRH3 candidates → graft into a heavy-chain template → predict binding → rank developability**
-""")
+"""
+            )
 
             with gr.Row():
                 with gr.Column(scale=2):
@@ -859,6 +917,7 @@ This mode runs the full closed-loop workflow in one click:
                 inputs=[],
                 outputs=[target_dropdown, heavy1, cdr31, heavy2, cdr32, heavy3, cdr33],
             )
+
 
 
 
