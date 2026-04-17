@@ -3,7 +3,7 @@ import os
 
 import gradio as gr
 import pandas as pd
-from huggingface_hub import hf_hub_download
+
 
 from generate_api import AntibodyGenerator
 from binder_api import AntibodyBinder
