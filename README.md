@@ -51,26 +51,25 @@ python code/train/train_conditional_cvae.py
 python code/train/train_esm2_cross_attention.py
 ```
 ## Web Application
+
 We extend the framework into a goal-oriented antibody design agent.
 
 Given:
+- an antigen sequence,
+- a heavy-chain template,
+- a CDRH3 template,
+- and user-defined design constraints,
 
-antigen sequence
-heavy-chain template
-CDRH3 template
-user-defined constraints
+the agent automatically:
+- generates candidate CDRH3 sequences,
+- predicts antibody–antigen binding,
+- filters and ranks candidates using developability criteria,
+- and iterates until the design requirements are met or the maximum number of rounds is reached.
 
-The agent automatically:
+### Launch locally
 
-generates candidates
-predicts binding
-filters by developability
-iterates until requirements are met
-
-Launch:
 ```bash
 python Antibody_Design_Application/app_gradio.py
-```
 
 Open:
 
@@ -85,9 +84,7 @@ A public online demo is available at:
 https://huggingface.co/spaces/Fanxu-alt/Antibody-Design-App
 
 ### Notes
-This agent uses a deterministic heuristic controller rather than a local large language model.
-
-Due to computational and deployment constraints. To use the full pipeline (including the agent), please run the application locally.
+The online demo is provided for accessibility and interactive exploration. In practice, performance may be affected by API latency and rate limits. For large-scale design tasks or extended iterative runs, we recommend using the local deployment.
 
 ## Pretrained Models
 
