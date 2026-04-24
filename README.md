@@ -1,4 +1,4 @@
-# CLAABD: a closed-loop framework for antigen-specific antibody design in sequence space
+# SeqAbDesign: a sequence-based framework for antigen-specific antibody design
 
 A sequence-driven closed-loop framework for antigen-specific antibody design that integrates:
 - Antigen-conditioned CDRH3 generation
