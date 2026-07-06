@@ -117,31 +117,6 @@ python code/inference/screen_candidates.py \
     --output_csv results/developability.csv
 ```
 
-## 4. Multi-objective candidate ranking
-
-Combine binding prediction and developability assessment:
-
-```bash
-python code/inference/rank_candidates.py \
-    --binding results/binding_prediction.csv \
-    --developability results/developability.csv \
-    --output results/final_ranked_candidates.csv
-```
-
-Output:
-
-```text
-results/final_ranked_candidates.csv
-```
-
-containing
-
-- overall ranking
-- binding probability
-- developability score
-- novelty score
-- final recommendation
-
 # Training
 
 ## Train H3-AbSeqVAE
