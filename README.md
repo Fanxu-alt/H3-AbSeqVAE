@@ -63,9 +63,11 @@ MFVFLVLLPLVSSQCVNL...
 Generate 1,000 antigen-conditioned CDRH3 sequences:
 
 ```bash
-python code/inference/generate_antibodies.py \
+python code/inference/generate.py \
     --antigen antigen.fasta \
+    --checkpoint conditional_cvae_finetune.pt \
     --num 1000 \
+    --temperature 1.0 \
     --output results/generated_candidates.csv
 ```
 
