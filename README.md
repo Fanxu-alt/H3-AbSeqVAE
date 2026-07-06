@@ -1,37 +1,16 @@
-# SPACE-antibody-design
-
-Implementation of the framework described in:
-
-**SPACE: A Unified Framework for Multi-Constraint Antigen-Specific Antibody Design Operating in Sequence Space**
+# SPACE
+### A Unified Framework for Multi-Constraint Antigen-Specific Antibody Design in Sequence Space
 
 SPACE is a sequence-based platform for antigen-specific antibody design that integrates:
 
 - **H3-AbSeqVAE**: antigen-conditioned CDRH3 sequence generation
 - **AbAgBinder**: antibody–antigen interaction prediction
-- **Developability-aware screening**: candidate prioritization using sequence-derived developability metrics
+- **Developability-aware screening**: candidate prioritization using sequence-derived developability metrics and novelty-aware ranking
 
+## Overview
 <p align="center">
   <img src="data/raw/fig1.png" width="800">
 </p>
-
-## Framework Overview
-
-SPACE consists of three major components:
-
-### 1. Repertoire-informed CDRH3 Generation
-
-- VAE pretraining on large-scale antibody repertoires
-- Antigen-conditioned CVAE fine-tuning
-
-### 2. Antibody–Antigen Interaction Prediction
-
-- ESM2 protein language model embeddings
-- Bidirectional cross-attention modeling
-
-### 3. Developability-aware Candidate Prioritization
-
-- Rule-based liability filtering
-- Multi-objective ranking based on binding and developability
 
 ## Quick Start
 
