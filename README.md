@@ -117,6 +117,10 @@ python code/inference/screen_candidates.py \
     --output_csv results/developability.csv
 ```
 
+# The interactive web server is available at
+
+https://antibody-design.vercel.app
+
 # Training
 
 ## Train H3-AbSeqVAE
@@ -137,11 +141,7 @@ python code/train/train_conditional_cvae.py
 python code/train/train_esm2_cross_attention.py
 ```
 
-### The interactive web server is available at
-
-https://antibody-design.vercel.app
-
-## Pretrained Models
+# Pretrained Models
 
 The repository includes:
 
@@ -195,7 +195,7 @@ checkpoints/
 - OpenAI API
 - ANARCI (for CDRH3 extraction)
 
-## Dataset Availability
+# Dataset Availability
 
 ### Repertoire Pretraining Dataset
 
