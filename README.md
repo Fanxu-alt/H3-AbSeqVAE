@@ -97,21 +97,24 @@ results/binding_prediction.csv
 
 ## 3. Evaluate developability
 
-Evaluate generated antibody candidates using the developability assessment module.
+First extract CDRH3 sequences from the reference antibody heavy-chain/VHH sequences:
+
+```bash
+python code/preprocess/extract_cdrh3.py \
+    --input data/processed/reference_antibodies.csv \
+    --heavy_col VHorVHH \
+    --target_col Antigen \
+    --output data/reference/reference_antibodies_with_cdrh3.csv
+
+Then run developability screening and ranking:
 
 ```bash
 python code/inference/screen_candidates.py \
-    --reference_csv data/reference/reference_antibodies.csv \
+    --reference_csv data/reference/reference_antibodies_with_cdrh3.csv \
     --candidate_csv results/generated_candidates.csv \
     --target "SARS-CoV2_WT" \
     --output_csv results/developability.csv
-```
 
-Output:
-
-```text
-results/developability.csv
-```
 
 ## 4. Multi-objective candidate ranking
 
