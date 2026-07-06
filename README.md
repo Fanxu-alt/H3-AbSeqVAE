@@ -190,7 +190,6 @@ checkpoints/
 - Pandas
 - Scikit-learn
 - Matplotlib
-- Seaborn
 - OpenAI API
 - ANARCI (for CDRH3 extraction)
 
