@@ -105,6 +105,7 @@ python code/preprocess/extract_cdrh3.py \
     --heavy_col VHorVHH \
     --target_col Antigen \
     --output data/reference/reference_antibodies_with_cdrh3.csv
+```
 
 Then run developability screening and ranking:
 
@@ -114,7 +115,7 @@ python code/inference/screen_candidates.py \
     --candidate_csv results/generated_candidates.csv \
     --target "SARS-CoV2_WT" \
     --output_csv results/developability.csv
-
+```
 
 ## 4. Multi-objective candidate ranking
 
