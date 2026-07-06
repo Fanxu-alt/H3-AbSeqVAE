@@ -7,7 +7,6 @@ SPACE is a sequence-based platform for antigen-specific antibody design that int
 - **AbAgBinder**: antibody–antigen interaction prediction
 - **Developability-aware screening**: candidate prioritization using sequence-derived developability metrics and novelty-aware ranking
 
-## Overview
 <p align="center">
   <img src="data/raw/fig1.png" width="800">
 </p>
@@ -181,7 +180,7 @@ After downloading, place the files in:
 checkpoints/
 ```
 
-### Main Dependencies
+# Main Dependencies
 
 - PyTorch
 - Transformers ≥ 4.30
@@ -197,7 +196,7 @@ checkpoints/
 
 # Dataset Availability
 
-### Repertoire Pretraining Dataset
+## Repertoire Pretraining Dataset
 
 The file:
 
@@ -218,7 +217,7 @@ Download:
 
 https://drive.google.com/file/d/1n46ld31QrC9oYlZVsR7JZsoOgX_TFupc/view?usp=drive_link.
 
-### Antigen-Specific Datasets
+## Antigen-Specific Datasets
 
 Antibody–antigen complexes were collected from the SAbDab database for:
 
