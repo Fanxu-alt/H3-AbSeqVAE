@@ -97,12 +97,14 @@ results/binding_prediction.csv
 
 ## 3. Evaluate developability
 
-Run the developability assessment:
+Evaluate generated antibody candidates using the developability assessment module.
 
 ```bash
-python code/inference/evaluate_developability.py \
-    --input results/generated_candidates.csv \
-    --output results/developability.csv
+python code/inference/screen_candidates.py \
+    --reference_csv data/reference/reference_antibodies.csv \
+    --candidate_csv results/generated_candidates.csv \
+    --target "SARS-CoV2_WT" \
+    --output_csv results/developability.csv
 ```
 
 Output:
@@ -110,12 +112,6 @@ Output:
 ```text
 results/developability.csv
 ```
-
-including
-
-- hard-filter pass/fail
-- developability risk score
-- liability annotations
 
 ## 4. Multi-objective candidate ranking
 
