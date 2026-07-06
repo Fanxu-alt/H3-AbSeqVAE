@@ -142,28 +142,6 @@ containing
 - novelty score
 - final recommendation
 
-# Reproducing the Figures
-
-All figures reported in the manuscript can be reproduced using the scripts under
-
-```text
-code/plot/
-```
-
-Examples:
-
-```bash
-python code/plot/plot_pretraining.py
-```
-
-```bash
-python code/plot/plot_binding_prediction.py
-```
-
-```bash
-python code/plot/plot_generalization.py
-```
-
 # Training
 
 ## Train H3-AbSeqVAE
