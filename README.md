@@ -101,7 +101,7 @@ First extract CDRH3 sequences from the reference antibody heavy-chain/VHH sequen
 
 ```bash
 python code/preprocess/extract_cdrh3.py \
-    --input data/processed/reference_antibodies.csv \
+    --input data/processed/abCoV-AbDab_final_no_empty_seq.csv \
     --heavy_col VHorVHH \
     --target_col Antigen \
     --output data/reference/reference_antibodies_with_cdrh3.csv
