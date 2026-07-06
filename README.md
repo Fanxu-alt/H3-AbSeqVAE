@@ -83,9 +83,10 @@ Evaluate generated antibodies using AbAgBinder:
 
 ```bash
 python code/inference/predict_binding.py \
-    --input results/generated_candidates.csv \
+    --input_csv results/generated_candidates.csv \
     --checkpoint checkpoints/best_esm2_cross_attention.pt \
-    --output results/binding_prediction.csv
+    --heavy_col Heavy \
+    --antigen_col antigen
 ```
 
 Output:
@@ -93,12 +94,6 @@ Output:
 ```text
 results/binding_prediction.csv
 ```
-
-including
-
-- binding probability
-- binding logits
-- predicted interaction score
 
 ## 3. Evaluate developability
 
