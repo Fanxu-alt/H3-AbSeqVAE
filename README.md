@@ -77,12 +77,6 @@ Output:
 results/generated_candidates.csv
 ```
 
-containing
-
-- generated CDRH3 sequences
-- heavy-chain sequences
-- candidate identifiers
-
 ## 2. Predict antibody–antigen interaction probability
 
 Evaluate generated antibodies using AbAgBinder:
