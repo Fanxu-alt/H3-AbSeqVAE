@@ -12,23 +12,182 @@ SPACE is a sequence-based platform for antigen-specific antibody design that int
   <img src="data/raw/fig1.png" width="800">
 </p>
 
-## Quick Start
+# Installation
 
-### Train Models
+Clone the repository:
 
-Train the repertoire VAE:
+```bash
+git clone https://github.com/Fanxu-alt/SPACE-antibody-design.git
+```
+
+Enter the project directory:
+
+```bash
+cd SPACE-antibody-design
+```
+
+Create the conda environment:
+
+```bash
+conda env create -f environment.yml
+```
+
+Activate the environment:
+
+```bash
+conda activate space
+```
+
+Alternatively, install the required packages manually:
+
+```bash
+pip install -r requirements.txt
+```
+
+Verify the installation:
+
+```bash
+python -c "import torch; print(torch.__version__)"
+```
+
+# Quick Start
+## 1. Generate antigen-specific antibody candidates
+
+Prepare an antigen FASTA file:
+
+```text
+>Spike
+MFVFLVLLPLVSSQCVNL...
+```
+
+Generate 1,000 antigen-conditioned CDRH3 sequences:
+
+```bash
+python code/inference/generate_antibodies.py \
+    --antigen antigen.fasta \
+    --num 1000 \
+    --output results/generated_candidates.csv
+```
+
+Output:
+
+```text
+results/generated_candidates.csv
+```
+
+containing
+
+- generated CDRH3 sequences
+- heavy-chain sequences
+- candidate identifiers
+
+## 2. Predict antibody–antigen interaction probability
+
+Evaluate generated antibodies using AbAgBinder:
+
+```bash
+python code/inference/predict_binding.py \
+    --input results/generated_candidates.csv \
+    --checkpoint checkpoints/best_esm2_cross_attention.pt \
+    --output results/binding_prediction.csv
+```
+
+Output:
+
+```text
+results/binding_prediction.csv
+```
+
+including
+
+- binding probability
+- binding logits
+- predicted interaction score
+
+## 3. Evaluate developability
+
+Run the developability assessment:
+
+```bash
+python code/inference/evaluate_developability.py \
+    --input results/generated_candidates.csv \
+    --output results/developability.csv
+```
+
+Output:
+
+```text
+results/developability.csv
+```
+
+including
+
+- hard-filter pass/fail
+- developability risk score
+- liability annotations
+
+## 4. Multi-objective candidate ranking
+
+Combine binding prediction and developability assessment:
+
+```bash
+python code/inference/rank_candidates.py \
+    --binding results/binding_prediction.csv \
+    --developability results/developability.csv \
+    --output results/final_ranked_candidates.csv
+```
+
+Output:
+
+```text
+results/final_ranked_candidates.csv
+```
+
+containing
+
+- overall ranking
+- binding probability
+- developability score
+- novelty score
+- final recommendation
+
+# Reproducing the Figures
+
+All figures reported in the manuscript can be reproduced using the scripts under
+
+```text
+code/plot/
+```
+
+Examples:
+
+```bash
+python code/plot/plot_pretraining.py
+```
+
+```bash
+python code/plot/plot_binding_prediction.py
+```
+
+```bash
+python code/plot/plot_generalization.py
+```
+
+# Training
+
+## Train H3-AbSeqVAE
 
 ```bash
 python code/train/train_cdrh3_vae.py
 ```
 
-Train the antigen-conditioned CVAE:
+## Fine-tune antigen-conditioned CVAE
 
 ```bash
 python code/train/train_conditional_cvae.py
 ```
 
-Train AbAgBinder:
+## Train AbAgBinder
 
 ```bash
 python code/train/train_esm2_cross_attention.py
@@ -77,21 +236,6 @@ After downloading, place the files in:
 ```text
 checkpoints/
 ```
-
-## Hardware Requirements
-
-### Recommended
-
-- GPU: NVIDIA A100
-- CPU: ≥ 8 cores
-- RAM: ≥ 32 GB
-- Storage: ≥ 20 GB
-
-### Software Requirements
-
-- Ubuntu 20.04 / Linux / macOS
-- Python ≥ 3.9
-
 
 ### Main Dependencies
 
