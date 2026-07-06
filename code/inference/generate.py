@@ -1,20 +1,14 @@
+#!/usr/bin/env python3
+import argparse
+from pathlib import Path
+
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-CKPT_PATH = "conditional_cvae_finetune.pt"
-
-TARGET_ANTIGEN = (
-    "RVQPTESIVRFPNITNLCPFGEVFNATRFASVYAWNRKRISNCVADYSVLYNSASFSTFKCYGVSPTKLNDLCFTNVYADSFVIRGDEVRQIAPGQTGKIADYNYKLPDDFTGCVIAWNSNNLDSKVGGNYNYLYRLFRKSNLKPFERDISTEIYQAGSTPCNGVEGFNCYFPLQSYGFQPTNGVGYQPYRVVVLSFELLHAPATVCGPKKSTNLVKNKCVNF"
-)
-
-NUM_SAMPLES = 1000
-MIN_LEN = 8
-TEMPERATURE = 1.0
-SAMPLE_MODE = "sample"   # "sample" or "argmax"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 
 AMINO_ACIDS = list("ACDEFGHIKLMNPQRSTVWY")
 SPECIAL_TOKENS = ["X", "<PAD>"]
@@ -43,7 +37,6 @@ class ResBlock1D(nn.Module):
         out = self.bn1(out)
         out = F.relu(out, inplace=True)
         out = self.dropout(out)
-
         out = self.conv2(out)
         out = self.bn2(out)
         out = out + residual
@@ -235,7 +228,41 @@ class ConditionalCNNVAE(nn.Module):
         return mu + eps * std
 
 
-def encode_seq(seq, fixed_len):
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate antigen-conditioned CDRH3 sequences using SPACE."
+    )
+    parser.add_argument("--antigen", required=True, help="Path to antigen FASTA file.")
+    parser.add_argument("--checkpoint", required=True, help="Path to conditional CVAE checkpoint.")
+    parser.add_argument("--num", type=int, default=1000, help="Number of CDRH3 sequences to generate.")
+    parser.add_argument("--temperature", type=float, default=1.0, help="Sampling temperature.")
+    parser.add_argument("--min_length", type=int, default=8, help="Minimum generated CDRH3 length.")
+    parser.add_argument("--sample_mode", choices=["sample", "argmax"], default="sample")
+    parser.add_argument("--output", default="generated.csv", help="Output CSV file.")
+    parser.add_argument("--seed", type=int, default=42)
+    return parser.parse_args()
+
+
+def read_fasta(fasta_file: str) -> str:
+    seq = []
+    with open(fasta_file) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith(">"):
+                continue
+            seq.append(line)
+    seq = "".join(seq).upper()
+
+    valid = set(AMINO_ACIDS)
+    seq = "".join(ch for ch in seq if ch in valid)
+
+    if len(seq) == 0:
+        raise ValueError(f"No valid amino-acid sequence found in {fasta_file}")
+
+    return seq
+
+
+def encode_seq(seq: str, fixed_len: int):
     seq = seq[:fixed_len]
     ids = [stoi.get(ch, UNK_IDX) for ch in seq]
     if len(ids) < fixed_len:
@@ -246,7 +273,7 @@ def encode_seq(seq, fixed_len):
 def decode_tokens(token_ids):
     chars = []
     for idx in token_ids:
-        ch = itos[idx]
+        ch = itos[int(idx)]
         if ch == "<PAD>":
             continue
         chars.append(ch)
@@ -281,8 +308,10 @@ def generate_from_antigen(
     logits = model.decoder(z_cond)
     len_logits = model.length_head(z_cond)
 
-    if temperature != 1.0:
-        logits = logits / temperature
+    if temperature <= 0:
+        raise ValueError("--temperature must be > 0")
+
+    logits = logits / temperature
 
     pred_lens = torch.argmax(len_logits, dim=-1) + 1
     pred_lens = torch.clamp(pred_lens, min=min_len, max=max_cdr3_len)
@@ -290,55 +319,74 @@ def generate_from_antigen(
     if sample_mode == "sample":
         probs = torch.softmax(logits, dim=-1)
         preds = torch.multinomial(
-            probs.reshape(-1, probs.size(-1)), num_samples=1
+            probs.reshape(-1, probs.size(-1)),
+            num_samples=1,
         ).view(num_samples, max_cdr3_len)
     else:
         preds = logits.argmax(dim=-1)
 
     seqs = []
     for i in range(num_samples):
-        L = int(pred_lens[i].item())
-        token_ids = preds[i][:L].cpu().tolist()
-        seq = decode_tokens(token_ids)
-        seqs.append((L, seq))
+        length = int(pred_lens[i].item())
+        token_ids = preds[i][:length].cpu().tolist()
+        cdrh3 = decode_tokens(token_ids)
+        seqs.append(
+            {
+                "candidate_id": f"C{i + 1}",
+                "cdrh3": cdrh3,
+                "cdrh3_length": length,
+            }
+        )
 
     return seqs
 
 
 def main():
-    ckpt = torch.load(CKPT_PATH, map_location=DEVICE)
+    args = parse_args()
+
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+
+    antigen_seq = read_fasta(args.antigen)
+
+    ckpt = torch.load(args.checkpoint, map_location=DEVICE)
     config = ckpt["config"]
+
+    if "max_antigen_len" not in ckpt:
+        raise KeyError("Checkpoint does not contain 'max_antigen_len'. Please use a conditional CVAE checkpoint.")
+
     antigen_max_len = ckpt["max_antigen_len"]
 
     model = ConditionalCNNVAE(config).to(DEVICE)
     model.load_state_dict(ckpt["model_state_dict"], strict=True)
     model.eval()
 
-    seqs = generate_from_antigen(
+    rows = generate_from_antigen(
         model=model,
-        antigen_seq=TARGET_ANTIGEN,
+        antigen_seq=antigen_seq,
         antigen_max_len=antigen_max_len,
         max_cdr3_len=config["max_cdr3_len"],
-        num_samples=NUM_SAMPLES,
+        num_samples=args.num,
         device=DEVICE,
-        min_len=MIN_LEN,
-        temperature=TEMPERATURE,
-        sample_mode=SAMPLE_MODE,
+        min_len=args.min_length,
+        temperature=args.temperature,
+        sample_mode=args.sample_mode,
     )
 
-    print("Target antigen:")
-    print(TARGET_ANTIGEN)
-    print("\nGenerated CDRH3 sequences:\n")
+    out_path = Path(args.output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    for i, (L, seq) in enumerate(seqs, 1):
-        print(f"{i:02d}\tlen={L}\t{seq}")
+    df = pd.DataFrame(rows)
+    df.insert(1, "antigen_fasta", Path(args.antigen).name)
+    df.insert(2, "antigen_length", len(antigen_seq))
+    df.to_csv(out_path, index=False)
 
-    with open("generated_cdrh3_from_antigenfinetune.txt", "w") as f:
-        f.write("Target antigen:\n")
-        f.write(TARGET_ANTIGEN + "\n\n")
-        f.write("Generated CDRH3 sequences:\n")
-        for i, (L, seq) in enumerate(seqs, 1):
-            f.write(f"{i:02d}\tlen={L}\t{seq}\n")
+    print(f"Generated {len(df)} CDRH3 sequences")
+    print(f"Checkpoint: {args.checkpoint}")
+    print(f"Antigen: {args.antigen}")
+    print(f"Output: {out_path}")
+    print(df.head().to_string(index=False))
 
 
 if __name__ == "__main__":
