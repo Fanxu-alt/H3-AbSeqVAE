@@ -137,7 +137,7 @@ python code/train/train_conditional_cvae.py
 python code/train/train_esm2_cross_attention.py
 ```
 
-### Online Web Application
+### The interactive web server is available at
 
 https://antibody-design.vercel.app
 
