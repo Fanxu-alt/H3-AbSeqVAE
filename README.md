@@ -1,5 +1,5 @@
 # SPACE
-### A Unified Framework for Multi-Constraint Antigen-Specific Antibody Design in Sequence Space
+### A sequence-space framework for multi-constraint antigen-specific antibody design
 
 SPACE is a sequence-based platform for antigen-specific antibody design that integrates:
 
