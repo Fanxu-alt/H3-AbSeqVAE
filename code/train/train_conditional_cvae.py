@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
-# Config
+
 
 @dataclass
 class Config:
@@ -16,7 +16,11 @@ class Config:
     cdr3_col: str = "cdr3"
 
     max_cdr3_len: int = 30
-    pretrain_ckpt: str = "vae_cdrh3_pretrain_varlen.pt"
+    pretrain_ckpt: str = (
+
+        
+        "covid_cdrh3_vae_pretrain/best_model.pt"
+    )
 
     batch_size: int = 256
     epochs: int = 100
@@ -33,18 +37,17 @@ class Config:
     kernel_size: int = 3
     dropout: float = 0.1
 
-    beta_kl: float = 0.1
-    kl_anneal_epochs: int = 10
+    beta_kl: float = 0.01
+    kl_anneal_epochs: int = 30
     length_loss_weight: float = 0.2
 
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    save_path: str = "conditional_cvae_scratch.pt"
+    save_path: str = "conditional_cvae_finetune_v2.pt"
     #save_path: str = "conditional_cvae_finetune.pt"
 
 
 cfg = Config()
 
-# Vocabulary
 
 AMINO_ACIDS = list("ACDEFGHIKLMNPQRSTVWY")
 SPECIAL_TOKENS = ["X", "<PAD>"]
@@ -56,7 +59,8 @@ PAD_IDX = stoi["<PAD>"]
 UNK_IDX = stoi["X"]
 VOCAB_SIZE = len(itos)
 
-# Dataset
+
+
 
 class AntigenCDR3Dataset(Dataset):
     def __init__(self, csv_path, antigen_col, cdr3_col, max_cdr3_len):
@@ -104,7 +108,8 @@ class AntigenCDR3Dataset(Dataset):
         a_mask = (a != PAD_IDX).long()
         return x, x_len, a, a_mask, a_len
 
-# Blocks
+
+
 
 class ResBlock1D(nn.Module):
     def __init__(self, channels: int, kernel_size: int = 3, dropout: float = 0.1):
@@ -129,7 +134,6 @@ class ResBlock1D(nn.Module):
         out = F.relu(out, inplace=True)
         return out
 
-# Pretrained-compatible CDR3 encoder / decoder
 
 class CNNEncoder(nn.Module):
     def __init__(
@@ -203,7 +207,8 @@ class CNNDecoder(nn.Module):
         logits = logits.transpose(1, 2)  # [B, L, V]
         return logits
 
-# Antigen encoder
+
+
 
 class AntigenEncoder(nn.Module):
     def __init__(
@@ -234,7 +239,8 @@ class AntigenEncoder(nn.Module):
         pooled = h.sum(dim=2) / mask.sum(dim=2).clamp_min(1.0)
         return pooled                        # [B,H]
 
-# Conditional CVAE
+
+
 
 class ConditionalCNNVAE(nn.Module):
     def __init__(self, cfg: Config):
@@ -273,7 +279,8 @@ class ConditionalCNNVAE(nn.Module):
         seq_feat_dim = cfg.hidden_dim * cfg.max_cdr3_len
         ant_feat_dim = cfg.antigen_hidden_dim
 
-        # posterior q(z|x,a)
+
+        
         self.posterior_mu = nn.Sequential(
             nn.Linear(seq_feat_dim + ant_feat_dim, cfg.fusion_dim),
             nn.ReLU(),
@@ -287,7 +294,8 @@ class ConditionalCNNVAE(nn.Module):
             nn.Linear(cfg.fusion_dim, cfg.latent_dim),
         )
 
-        # prior p(z|a)
+
+        
         self.prior_mu = nn.Sequential(
             nn.Linear(ant_feat_dim, cfg.fusion_dim),
             nn.ReLU(),
@@ -301,7 +309,8 @@ class ConditionalCNNVAE(nn.Module):
             nn.Linear(cfg.fusion_dim, cfg.latent_dim),
         )
 
-        # fuse z + antigen embedding -> conditional latent for decoder
+     
+        
         self.decoder_input = nn.Sequential(
             nn.Linear(cfg.latent_dim + ant_feat_dim, cfg.fusion_dim),
             nn.ReLU(),
@@ -309,7 +318,8 @@ class ConditionalCNNVAE(nn.Module):
             nn.Linear(cfg.fusion_dim, cfg.latent_dim),
         )
 
-        # length from conditional latent
+   
+        
         self.length_head = nn.Sequential(
             nn.Linear(cfg.latent_dim, cfg.latent_dim),
             nn.ReLU(),
@@ -319,10 +329,10 @@ class ConditionalCNNVAE(nn.Module):
 
     @staticmethod
     def reparameterize(mu, logvar):
+        logvar = torch.clamp(logvar, min=-10.0, max=10.0)
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
-
     def forward(self, x, a, a_mask):
         hx = self.encoder.encode_feature(x)
         ha = self.antigen_encoder(a, a_mask)
@@ -372,30 +382,199 @@ class ConditionalCNNVAE(nn.Module):
             results.append((preds, pred_len))
         return results
 
-# Load pretrained backbone
+
 
 def load_pretrained_backbone(model, ckpt_path):
-    ckpt = torch.load(ckpt_path, map_location="cpu")
-    state = ckpt["model_state_dict"]
 
-    enc_state = {}
-    dec_state = {}
-    for k, v in state.items():
-        if k.startswith("encoder."):
-            enc_state[k[len("encoder."):]] = v
-        elif k.startswith("decoder."):
-            dec_state[k[len("decoder."):]] = v
-
-    missing_e, unexpected_e = model.encoder.load_state_dict(enc_state, strict=False)
-    missing_d, unexpected_d = model.decoder.load_state_dict(dec_state, strict=False)
-
-    print("Loaded pretrained encoder/decoder")
-    print("Encoder missing:", missing_e)
-    print("Encoder unexpected:", unexpected_e)
-    print("Decoder missing:", missing_d)
-    print("Decoder unexpected:", unexpected_d)
     
-# Loss
+    if not os.path.isfile(ckpt_path):
+        raise FileNotFoundError(
+            f"Pretrained checkpoint not found: {ckpt_path}"
+        )
+
+    ckpt = torch.load(
+        ckpt_path,
+        map_location="cpu",
+        weights_only=False,
+    )
+
+    if "model_state_dict" not in ckpt:
+        raise KeyError(
+            "Checkpoint does not contain 'model_state_dict'. "
+            f"Available keys: {list(ckpt.keys())}"
+        )
+
+    pretrained_state = ckpt["model_state_dict"]
+
+    def rename_encoder_key(key):
+        key = key.replace("input_projection.", "input_proj.")
+        key = key.replace("mu_head.", "fc_mu.")
+        key = key.replace("logvar_head.", "fc_logvar.")
+        key = key.replace(".norm1.", ".bn1.")
+        key = key.replace(".norm2.", ".bn2.")
+        return key
+
+    def rename_decoder_key(key):
+        key = key.replace("latent_projection.", "fc.")
+        key = key.replace("output_projection.", "output_proj.")
+        key = key.replace(".norm1.", ".bn1.")
+        key = key.replace(".norm2.", ".bn2.")
+        return key
+
+    encoder_state = {}
+    decoder_state = {}
+
+    for full_key, value in pretrained_state.items():
+        if full_key.startswith("encoder."):
+            local_key = full_key[len("encoder."):]
+            local_key = rename_encoder_key(local_key)
+            encoder_state[local_key] = value
+
+        elif full_key.startswith("decoder."):
+            local_key = full_key[len("decoder."):]
+            local_key = rename_decoder_key(local_key)
+            decoder_state[local_key] = value
+
+    if not encoder_state:
+        raise RuntimeError(
+            "No encoder parameters were found in the pretrained checkpoint."
+        )
+
+    if not decoder_state:
+        raise RuntimeError(
+            "No decoder parameters were found in the pretrained checkpoint."
+        )
+
+    def validate_shapes(module, mapped_state, module_name):
+        target_state = module.state_dict()
+
+        unexpected = sorted(set(mapped_state) - set(target_state))
+        missing = sorted(set(target_state) - set(mapped_state))
+
+        shape_mismatches = []
+        for key in sorted(set(mapped_state) & set(target_state)):
+            source_shape = tuple(mapped_state[key].shape)
+            target_shape = tuple(target_state[key].shape)
+
+            if source_shape != target_shape:
+                shape_mismatches.append(
+                    f"{key}: pretrained={source_shape}, "
+                    f"current={target_shape}"
+                )
+
+        if unexpected:
+            raise RuntimeError(
+                f"{module_name}: unexpected mapped keys:\n"
+                + "\n".join(unexpected)
+            )
+
+        if shape_mismatches:
+            raise RuntimeError(
+                f"{module_name}: shape mismatches:\n"
+                + "\n".join(shape_mismatches)
+            )
+
+        
+        allowed_missing = {
+            key for key in missing
+            if key.endswith("num_batches_tracked")
+        }
+
+        forbidden_missing = sorted(set(missing) - allowed_missing)
+
+        if forbidden_missing:
+            raise RuntimeError(
+                f"{module_name}: parameters were not supplied by the "
+                "pretrained checkpoint:\n"
+                + "\n".join(forbidden_missing)
+            )
+
+        return allowed_missing
+
+    encoder_allowed_missing = validate_shapes(
+        model.encoder,
+        encoder_state,
+        "Encoder",
+    )
+    decoder_allowed_missing = validate_shapes(
+        model.decoder,
+        decoder_state,
+        "Decoder",
+    )
+
+    encoder_result = model.encoder.load_state_dict(
+        encoder_state,
+        strict=False,
+    )
+    decoder_result = model.decoder.load_state_dict(
+        decoder_state,
+        strict=False,
+    )
+
+    encoder_forbidden_missing = [
+        key for key in encoder_result.missing_keys
+        if key not in encoder_allowed_missing
+    ]
+    decoder_forbidden_missing = [
+        key for key in decoder_result.missing_keys
+        if key not in decoder_allowed_missing
+    ]
+
+    if (
+        encoder_forbidden_missing
+        or encoder_result.unexpected_keys
+        or decoder_forbidden_missing
+        or decoder_result.unexpected_keys
+    ):
+        raise RuntimeError(
+            "Pretrained backbone loading was incomplete.\n"
+            f"Encoder missing: {encoder_forbidden_missing}\n"
+            f"Encoder unexpected: {encoder_result.unexpected_keys}\n"
+            f"Decoder missing: {decoder_forbidden_missing}\n"
+            f"Decoder unexpected: {decoder_result.unexpected_keys}"
+        )
+
+    encoder_target = model.encoder.state_dict()
+    decoder_target = model.decoder.state_dict()
+
+    encoder_loaded_numel = sum(
+        encoder_target[key].numel()
+        for key in encoder_state
+        if key in encoder_target
+    )
+    decoder_loaded_numel = sum(
+        decoder_target[key].numel()
+        for key in decoder_state
+        if key in decoder_target
+    )
+
+    encoder_total_numel = sum(
+        tensor.numel() for tensor in encoder_target.values()
+    )
+    decoder_total_numel = sum(
+        tensor.numel() for tensor in decoder_target.values()
+    )
+
+    print("=" * 80)
+    print("OAS pretrained backbone loaded successfully")
+    print(f"Checkpoint: {ckpt_path}")
+    print(
+        f"Encoder coverage: "
+        f"{encoder_loaded_numel:,}/{encoder_total_numel:,} "
+        f"({100 * encoder_loaded_numel / encoder_total_numel:.2f}%)"
+    )
+    print(
+        f"Decoder coverage: "
+        f"{decoder_loaded_numel:,}/{decoder_total_numel:,} "
+        f"({100 * decoder_loaded_numel / decoder_total_numel:.2f}%)"
+    )
+    print("Encoder missing:", encoder_result.missing_keys)
+    print("Encoder unexpected:", encoder_result.unexpected_keys)
+    print("Decoder missing:", decoder_result.missing_keys)
+    print("Decoder unexpected:", decoder_result.unexpected_keys)
+    print("=" * 80)
+
+
 
 def conditional_vae_loss(
     logits,
@@ -415,10 +594,10 @@ def conditional_vae_loss(
         ignore_index=PAD_IDX,
         reduction="mean",
     )
-
+    logvar_q = torch.clamp(logvar_q, min=-10.0, max=10.0)
+    logvar_p = torch.clamp(logvar_p, min=-10.0, max=10.0)
     var_q = torch.exp(logvar_q)
     var_p = torch.exp(logvar_p)
-
     kl = 0.5 * torch.sum(
         logvar_p - logvar_q + (var_q + (mu_q - mu_p).pow(2)) / var_p - 1,
         dim=1
@@ -437,7 +616,7 @@ def get_beta(epoch, max_beta, anneal_epochs):
         return max_beta
     return max_beta * min(1.0, epoch / anneal_epochs)
 
-# Utils
+
 
 def decode_tokens(token_ids):
     chars = []
@@ -448,7 +627,7 @@ def decode_tokens(token_ids):
         chars.append(ch)
     return "".join(chars)
 
-# Train / Eval
+
 
 def train_one_epoch(model, loader, optimizer, device, beta, len_weight):
     model.train()
@@ -468,6 +647,10 @@ def train_one_epoch(model, loader, optimizer, device, beta, len_weight):
             beta=beta, len_weight=len_weight
         )
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            model.parameters(),
+            max_norm=5.0,
+        )
         optimizer.step()
 
         total_loss += loss.item()
@@ -530,7 +713,7 @@ def show_reconstructions(model, dataset, device, num_examples=5):
         print(f"recon  (len={pred_len:2d}): {recon_seq}")
         print("-" * 80)
 
-# Main
+
 
 def main():
     dataset = AntigenCDR3Dataset(
@@ -548,7 +731,7 @@ def main():
     val_loader = DataLoader(val_set, batch_size=cfg.batch_size, shuffle=False, drop_last=False)
 
     model = ConditionalCNNVAE(cfg).to(cfg.device)
-#    load_pretrained_backbone(model, cfg.pretrain_ckpt)
+    load_pretrained_backbone(model, cfg.pretrain_ckpt)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
 
@@ -589,4 +772,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
