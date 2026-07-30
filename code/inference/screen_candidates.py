@@ -1,25 +1,3 @@
-#!/usr/bin/env python3
-"""
-Developability screening and ranking for SPACE antibody candidates.
-
-Input candidate CSV should contain:
-
-Target
-
-Heavy
-
-cdr3
-
-Optional:
-
-candidate_name
-
-binding_probability
-
-binding_logit
-
-"""
-
 import argparse
 import re
 from dataclasses import dataclass, asdict
